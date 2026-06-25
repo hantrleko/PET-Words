@@ -1,0 +1,189 @@
+/* =====================================================================
+ * PET Kids 40天计划 - 自定义样式
+ * 配套 Tailwind CSS（CDN）。本文件负责 Tailwind 难以表达的：
+ *   - 配色变量、mascot 动画、卡片堆叠、confetti 容器、移动优先适配等
+ * 方案第5节：儿童化交互机制（视觉/反馈/操作/无障碍）
+ * ===================================================================== */
+
+:root {
+  --sky:   #4FC3F7;   /* 天蓝 主色 */
+  --grass: #81C784;   /* 草绿 */
+  --sun:   #FFD54F;   /* 阳光黄 */
+  --coral: #FF8A65;   /* 珊瑚 强调 */
+  --ink:   #1f2937;   /* 深灰 文字 */
+  --paper: #fffdf7;   /* 暖白 背景 */
+  --soft:  #f3f8fc;   /* 柔和卡背 */
+}
+
+* { -webkit-tap-highlight-color: transparent; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Baloo 2', 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  /* 顶部进度条 + 底部导航栏留白 */
+  padding-top: 56px;
+  padding-bottom: 80px;
+}
+
+/* ---------- 顶部全局进度条 ---------- */
+.top-progress-bar {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: 6px; z-index: 60;
+  background: #e5edf5;
+}
+.top-progress-bar > span {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, var(--sky), var(--grass));
+  transition: width .5s ease;
+}
+
+/* ---------- 页面切换 ---------- */
+.page { display: none; animation: pageIn .35s ease; }
+.page.active { display: block; }
+@keyframes pageIn { from { opacity: 0; transform: translateY(8px);} to {opacity:1; transform:none;} }
+
+/* ---------- 底部固定导航栏 ---------- */
+.bottom-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+  display: flex; justify-content: space-around; align-items: stretch;
+  background: #ffffffee; backdrop-filter: blur(8px);
+  border-top: 1px solid #e5edf5;
+  box-shadow: 0 -4px 18px rgba(0,0,0,.06);
+}
+.bottom-nav button {
+  flex: 1; min-height: 64px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; color: #9aa6b2; font-size: 11px; font-weight: 600;
+  background: transparent; border: none; transition: color .2s;
+}
+.bottom-nav button.active { color: var(--sky); }
+.bottom-nav button i { font-size: 20px; }
+
+/* ---------- 大按钮（儿童友好 ≥48px） ---------- */
+.kid-btn {
+  min-height: 52px; border-radius: 18px; font-weight: 800; font-size: 18px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  transition: transform .12s ease, box-shadow .2s ease;
+  box-shadow: 0 6px 0 rgba(0,0,0,.08);
+  border: none; cursor: pointer;
+}
+.kid-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0,0,0,.08); }
+.kid-btn-primary { background: var(--sky); color: #fff; }
+.kid-btn-grass   { background: var(--grass); color: #fff; }
+.kid-btn-sun     { background: var(--sun);  color: var(--ink); }
+.kid-btn-coral   { background: var(--coral); color: #fff; }
+.kid-btn-ghost   { background: #fff; color: var(--ink); border: 2px solid #e5edf5; box-shadow:none;}
+
+/* ---------- 卡片 ---------- */
+.kid-card {
+  background: #fff; border-radius: 24px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.06);
+  border: 1px solid #eef4fb;
+}
+
+/* ---------- 单词大卡片（Learn / Review） ---------- */
+.vocab-card {
+  background: linear-gradient(160deg, #ffffff, #f6fbff);
+  border-radius: 28px;
+  box-shadow: 0 14px 40px rgba(79,195,247,.18);
+  border: 1px solid #e3f1fb;
+}
+.vocab-word { font-size: 40px; font-weight: 800; letter-spacing: -.5px; }
+.vocab-phonetic { font-size: 18px; color: var(--coral); font-weight: 600; }
+
+/* 字母级拼写反馈 */
+.letter-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 48px; margin: 0 3px; border-radius: 12px;
+  font-size: 24px; font-weight: 800; border: 2px solid #e5edf5;
+  background: #fff; transition: all .2s;
+}
+.letter-chip.correct { background: var(--grass); color:#fff; border-color: var(--grass); animation: pop .3s; }
+.letter-chip.wrong   { background: var(--coral); color:#fff; border-color: var(--coral); animation: shake .35s; }
+.letter-chip.hint    { background: var(--sun);   color: var(--ink); border-color: var(--sun); }
+@keyframes pop   { 0%{transform:scale(.7)} 60%{transform:scale(1.15)} 100%{transform:scale(1)} }
+@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+
+/* ---------- 选择题选项 ---------- */
+.choice-btn {
+  min-height: 64px; border-radius: 20px; font-size: 20px; font-weight: 700;
+  background: #fff; color: var(--ink); border: 3px solid #e5edf5;
+  transition: all .18s; text-align: left; padding: 14px 20px;
+}
+.choice-btn:hover { border-color: var(--sky); }
+.choice-btn.correct { background: var(--grass); color:#fff; border-color: var(--grass); animation: pop .3s; }
+.choice-btn.wrong   { background: var(--coral); color:#fff; border-color: var(--coral); animation: shake .35s; }
+.choice-btn:disabled { opacity: .7; }
+
+/* ---------- Mascot（可爱狐狸 emoji 角色动画） ---------- */
+.mascot { font-size: 56px; display:inline-block; animation: bob 2.6s ease-in-out infinite; }
+.mascot.lg { font-size: 80px; }
+.mascot.pop { animation: pop .4s; }
+@keyframes bob { 0%,100%{transform:translateY(0) rotate(-3deg)} 50%{transform:translateY(-8px) rotate(3deg)} }
+
+/* ---------- 星星 & 徽章 ---------- */
+.star-coin {
+  display:inline-flex; align-items:center; gap:4px;
+  background: linear-gradient(135deg, #FFE082, #FFB300);
+  color: #5b4500; font-weight: 800; border-radius: 999px; padding: 4px 12px;
+  box-shadow: 0 4px 10px rgba(255,179,0,.3);
+}
+.badge-tile {
+  background: #fff; border-radius: 20px; border: 2px dashed #d6e6f5;
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+  padding: 16px 8px; transition: all .25s;
+}
+.badge-tile.unlocked { border-style: solid; border-color: var(--sun); background: linear-gradient(160deg,#fffdf0,#fff); box-shadow:0 6px 18px rgba(255,213,79,.25);}
+.badge-tile.locked { filter: grayscale(1); opacity:.55; }
+
+/* ---------- 40 天日历网格 ---------- */
+.day-cell {
+  aspect-ratio: 1/1; border-radius: 14px; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:2px; font-weight:700; font-size:13px;
+  background: #eef4fb; color:#9aa6b2; border: 2px solid transparent; transition: all .2s;
+}
+.day-cell.done    { background: var(--grass); color:#fff; }
+.day-cell.partial { background: var(--sun);   color: var(--ink); }
+.day-cell.today   { border-color: var(--coral); transform: scale(1.06); }
+.day-cell:active  { transform: scale(.95); }
+
+/* ---------- 进度条/环 ---------- */
+.ring-bg { stroke: #e5edf5; }
+.ring-fg { stroke: var(--grass); transition: stroke-dashoffset .6s ease; transform: rotate(-90deg); transform-origin: center; }
+
+/* ---------- 弹窗 Modal ---------- */
+.modal-mask {
+  position: fixed; inset:0; z-index: 80; background: rgba(20,30,50,.5);
+  display:flex; align-items:center; justify-content:center; padding: 20px;
+  animation: fadeIn .25s;
+}
+.modal-box {
+  background: #fff; border-radius: 28px; max-width: 420px; width:100%;
+  padding: 28px 22px; text-align:center;
+  box-shadow: 0 20px 60px rgba(0,0,0,.25); animation: pop .35s;
+}
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+/* ---------- confetti 容器 ---------- */
+#confetti-canvas { position: fixed; inset:0; z-index: 90; pointer-events:none; }
+
+/* ---------- 通用辅助 ---------- */
+.text-ink { color: var(--ink); }
+.text-coral { color: var(--coral); }
+.text-sky { color: var(--sky); }
+.bg-soft { background: var(--soft); }
+.hidden-page { display:none !important; }
+
+/* 减少动画（无障碍） */
+.reduce-motion *, .reduce-motion *::before, .reduce-motion *::after {
+  animation-duration: .001ms !important; transition-duration: .001ms !important;
+}
+
+/* ---------- 响应式微调 ---------- */
+@media (min-width: 640px) {
+  .vocab-word { font-size: 52px; }
+  .container-kid { max-width: 560px; margin: 0 auto; }
+}
