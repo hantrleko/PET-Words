@@ -2255,6 +2255,7 @@ function init() {
  * 21. 词库加载：fetch 优先，绝对 URL，DOMContentLoaded 后触发
  * ===================================================================== */
 (function loadVocabAndInit() {
+  var MIN_FULL_VOCAB_COUNT = 2000;
   // ── URL 候选列表构建 ──────────────────────────────────────────────────
   // 内联脚本的 document.currentScript.src 为空，用 document.baseURI 做基础
   var base = document.baseURI || location.href;
@@ -2309,7 +2310,7 @@ function init() {
   function runInit() {
     var attempts = 0;
     function tryInit() {
-      if (window.PET_VOCAB && window.PET_VOCAB.length > 0) {
+      if (window.PET_VOCAB && window.PET_VOCAB.length >= MIN_FULL_VOCAB_COUNT) {
         init();
       } else if (attempts++ < 100) {
         setTimeout(tryInit, 100);
@@ -2333,9 +2334,9 @@ function init() {
     }
   }
 
-  // 如果 window.PET_VOCAB 已就绪（不太可能，因为没有外链 script 了），直接用
-  if (window.PET_VOCAB && window.PET_VOCAB.length > 0) {
-    console.log('[PET] PET_VOCAB 已存在，直接初始化');
+  // 只有完整词库已就绪时才直接初始化；旧内联词库不足 2000 词，需要继续加载外部完整词库。
+  if (window.PET_VOCAB && window.PET_VOCAB.length >= MIN_FULL_VOCAB_COUNT) {
+    console.log('[PET] PET_VOCAB 已存在，直接初始化：' + window.PET_VOCAB.length + ' 词');
     doInit();
     return;
   }
@@ -2348,7 +2349,7 @@ function init() {
       var s = document.createElement('script');
       s.src = candidates[0] || 'vocab-data.js';
       s.onload = function() {
-        if (window.PET_VOCAB && window.PET_VOCAB.length) {
+        if (window.PET_VOCAB && window.PET_VOCAB.length >= MIN_FULL_VOCAB_COUNT) {
           console.log('[PET] <script> 标签加载词库成功');
           doInit();
         } else {
@@ -2370,7 +2371,7 @@ function init() {
       })
       .then(function(code) {
         (0, eval)(code);
-        if (!window.PET_VOCAB || !window.PET_VOCAB.length) throw new Error('eval 后 PET_VOCAB 为空');
+        if (!window.PET_VOCAB || window.PET_VOCAB.length < MIN_FULL_VOCAB_COUNT) throw new Error('eval 后 PET_VOCAB 不完整');
         console.log('[PET] 词库加载成功 [' + index + ']：' + window.PET_VOCAB.length + ' 词，URL=' + url);
         doInit();
       })
