@@ -19,6 +19,10 @@
   <!-- ===== canvas-confetti 撒花动画 — jsdelivr + bootcdn 双源 ===== -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"
           onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.bootcdn.net/ajax/libs/canvas-confetti/1.6.0/confetti.browser.min.js';document.head.appendChild(s);"></script>
+  <!-- ===== Supabase JS SDK ===== -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <!-- ===== PET-Words 雲端同步模組 ===== -->
+  <script src="js/supabase-sync.js"></script>
 
   <!-- ===== 自定义样式（内联，避免外部 CSS 路径失效） ===== -->
   <style>
@@ -234,10 +238,20 @@
             <p class="text-xs text-gray-400 font-semibold">40天单词挑战</p>
           </div>
         </div>
-        <button id="btn-settings" class="w-11 h-11 rounded-full bg-white shadow flex items-center justify-center text-sky" aria-label="设置">
-          <i class="fa-solid fa-gear text-lg"></i>
-        </button>
+        <div class="flex items-center gap-2">
+          <!-- 登入/同步按鈕 -->
+          <button id="btn-auth" class="relative flex flex-col items-center justify-center w-14 h-11 rounded-2xl bg-white shadow gap-0.5 px-2" aria-label="登入同步">
+            <i class="fa-solid fa-user text-gray-400"></i>
+            <span class="text-xs font-bold text-gray-400">登入</span>
+            <span id="sync-indicator" class="absolute top-1 right-1 w-2 h-2 rounded-full bg-gray-300"></span>
+          </button>
+          <button id="btn-settings" class="w-11 h-11 rounded-full bg-white shadow flex items-center justify-center text-sky" aria-label="设置">
+            <i class="fa-solid fa-gear text-lg"></i>
+          </button>
+        </div>
       </header>
+      <!-- 同步状态文字 -->
+      <div class="text-right -mt-2 mb-1 h-4"><span id="sync-status-text" class="text-xs text-sky-500 font-semibold"></span></div>
 
       <!-- Hero：今日概览 -->
       <div class="kid-card p-6 mb-4 text-center bg-gradient-to-br from-sky to-grass text-white">
@@ -510,6 +524,7 @@
         <div style="height:260px;"><canvas id="chart-topic"></canvas></div>
       </div>
 
+      <button id="btn-cloud-sync" class="kid-btn kid-btn-primary w-full h-14 mb-3"><i class="fa-solid fa-cloud-arrow-up"></i> 雲端同步登入</button>
       <button id="btn-export" class="kid-btn kid-btn-ghost w-full h-14 mb-3"><i class="fa-solid fa-download"></i> 导出进度备份</button>
       <button id="btn-import-vocab" class="kid-btn kid-btn-sun w-full h-14 mb-3"><i class="fa-solid fa-file-import"></i> 导入词库</button>
       <button id="btn-reset" class="kid-btn kid-btn-ghost w-full h-14 text-coral mb-3"><i class="fa-solid fa-trash-can"></i> 重置所有进度</button>
@@ -1180,13 +1195,15 @@ function masteredCount() {
 function norm(s) { return (s || '').toLowerCase().trim(); }
 
 /* =====================================================================
- * 2. 持久化：localStorage 同步
+ * 2. 持久化：localStorage + Supabase 雲端同步
  * ===================================================================== */
 function saveState() {
   try {
     const persist = { ...appState };
     delete persist._todayLearnedQueue;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(persist));
+    // 觸發雲端同步（防抖，2秒後才實際寫入）
+    if (window.PetSync) window.PetSync.scheduleSyncToCloud();
   } catch (e) { console.warn('保存失败', e); }
 }
 
@@ -2117,10 +2134,14 @@ function resetProgress() {
   `;
   showModal(html, root => {
     $('.modal-cancel', root).addEventListener('click', closeModal);
-    $('#reset-confirm', root).addEventListener('click', () => {
+    $('#reset-confirm', root).addEventListener('click', async () => {
       appState = defaultState();
       saveState();
       PLAN = buildPlan();
+      // 同步刪除雲端記錄
+      if (window.PetSync && window.PetSync.isLoggedIn()) {
+        await window.PetSync.pushProgressToCloud();
+      }
       closeModal();
       showPage('home');
       showResultModal('已重置', '<p>重新开始你的40天挑战吧！💪</p>', { mascot: '🦊' });
@@ -2230,6 +2251,11 @@ function bindEvents() {
   $('#btn-export').addEventListener('click', exportProgress);
   $('#btn-import-vocab').addEventListener('click', importVocab);
   $('#btn-reset').addEventListener('click', resetProgress);
+  // 雲端同步按鈕
+  const btnAuth = $('#btn-auth');
+  if (btnAuth) btnAuth.addEventListener('click', () => { if (window.PetSync) window.PetSync.showAuthModal(); });
+  const btnCloudSync = $('#btn-cloud-sync');
+  if (btnCloudSync) btnCloudSync.addEventListener('click', () => { if (window.PetSync) window.PetSync.showAuthModal(); });
 }
 
 function init() {
@@ -2249,6 +2275,11 @@ function init() {
     setTimeout(showTutorial, 600);
   }
   checkBadges();
+  // 啟動 Supabase 雲端同步（非阻塞）
+  if (window.PetSync) {
+    const ok = window.PetSync.init();
+    if (ok) console.log('[PET] Supabase 雲端同步已啟動');
+  }
 }
 
 /* =====================================================================
