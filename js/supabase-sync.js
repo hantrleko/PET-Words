@@ -271,13 +271,35 @@ function showAuthModal() {
         const pass  = passEl.value;
         if (!email || !pass) { showError('請輸入郵件和密碼'); return; }
         if (pass.length < 6) { showError('密碼至少需要 6 位'); return; }
-        root.querySelector('#auth-signup').textContent = '注冊中…';
-        const { error } = await _supabase.auth.signUp({ email, password: pass });
-        if (error) { showError(error.message); root.querySelector('#auth-signup').textContent = '注冊'; }
-        else {
+        const signupBtn = root.querySelector('#auth-signup');
+        signupBtn.textContent = '注冊中…';
+        signupBtn.disabled = true;
+
+        const { data: signUpData, error: signUpError } = await _supabase.auth.signUp({ email, password: pass });
+        if (signUpError) {
+          showError(signUpError.message);
+          signupBtn.textContent = '注冊';
+          signupBtn.disabled = false;
+          return;
+        }
+
+        // 若 email 確認已關閉，session 會直接回傳；否則需要再次 signIn
+        if (signUpData?.session) {
+          // 已直接取得 session（email confirm 已關閉）
           if (typeof closeModal === 'function') closeModal();
-          if (typeof showResultModal === 'function') {
-            showResultModal('注冊成功！', '<p>請查收確認郵件，驗證後即可登入。</p>', { mascot: '🎉' });
+          showSyncStatus('✓ 注冊並登入成功', 'grass');
+        } else {
+          // email confirm 開啟中，嘗試直接 signIn
+          const { error: signInError } = await _supabase.auth.signInWithPassword({ email, password: pass });
+          if (signInError) {
+            // 登入失敗（可能需要驗證 email）
+            if (typeof closeModal === 'function') closeModal();
+            if (typeof showResultModal === 'function') {
+              showResultModal('注冊成功！', '<p>請查收確認郵件，驗證後即可登入。</p>', { mascot: '🎉' });
+            }
+          } else {
+            if (typeof closeModal === 'function') closeModal();
+            showSyncStatus('✓ 注冊並登入成功', 'grass');
           }
         }
       });
