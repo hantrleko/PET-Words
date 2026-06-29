@@ -25,10 +25,6 @@ function initSupabase() {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      // 避免多個 client 實例競爭 Web Locks（對單頁面應用安全）
-      lock: false,
-      // 使用固定 storageKey 避免與其他 client 衝突
-      storageKey: 'pet-words-auth',
     }
   });
 
@@ -98,21 +94,6 @@ async function pushProgressToCloud() {
   if (typeof appState === 'undefined') return;
 
   try {
-    // 先確認 session 有效（避免 token 過期導致 upsert 永遠等待）
-    const { data: { session }, error: sessionError } = await _supabase.auth.getSession();
-    if (sessionError || !session) {
-      console.warn('[Sync] session 無效，尝試刷新 token');
-      // 嘗試刷新 token
-      const { error: refreshError } = await _supabase.auth.refreshSession();
-      if (refreshError) {
-        console.warn('[Sync] token 刷新失敗：', refreshError.message);
-        showSyncStatus('登入已過期', 'coral');
-        _currentUser = null;
-        updateAuthUI();
-        return;
-      }
-    }
-
     const persist = { ...appState };
     delete persist._todayLearnedQueue;
 
