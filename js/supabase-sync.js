@@ -23,10 +23,12 @@ function initSupabase() {
   }
   _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
     auth: {
-      // GitHub Pages 部署後的 redirect URL
-      redirectTo: window.location.origin + window.location.pathname,
       persistSession: true,
       autoRefreshToken: true,
+      // 避免多個 client 實例競爭 Web Locks（對單頁面應用安全）
+      lock: false,
+      // 使用固定 storageKey 避免與其他 client 衝突
+      storageKey: 'pet-words-auth',
     }
   });
 
