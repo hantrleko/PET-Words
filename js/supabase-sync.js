@@ -92,18 +92,25 @@ function scheduleSyncToCloud() {
 
 // ── 推送進度到雲端 ────────────────────────────────────────────────────
 async function pushProgressToCloud() {
-  console.log('[Sync-debug] pushProgressToCloud called, isLoggedIn:', isLoggedIn(), '_supabase:', !!_supabase, 'appState:', typeof appState);
-  if (!isLoggedIn() || !_supabase) {
-    console.warn('[Sync-debug] early return: isLoggedIn=', isLoggedIn(), '_supabase=', !!_supabase);
-    return;
-  }
-  // appState 由主應用提供（全域變數）
-  if (typeof appState === 'undefined') {
-    console.warn('[Sync-debug] early return: appState undefined');
-    return;
-  }
+  if (!isLoggedIn() || !_supabase) return;
+  if (typeof appState === 'undefined') return;
 
   try {
+    // 先確認 session 有效（避免 token 過期導致 upsert 永遠等待）
+    const { data: { session }, error: sessionError } = await _supabase.auth.getSession();
+    if (sessionError || !session) {
+      console.warn('[Sync] session 無效，尝試刷新 token');
+      // 嘗試刷新 token
+      const { error: refreshError } = await _supabase.auth.refreshSession();
+      if (refreshError) {
+        console.warn('[Sync] token 刷新失敗：', refreshError.message);
+        showSyncStatus('登入已過期', 'coral');
+        _currentUser = null;
+        updateAuthUI();
+        return;
+      }
+    }
+
     const persist = { ...appState };
     delete persist._todayLearnedQueue;
 
@@ -121,10 +128,15 @@ async function pushProgressToCloud() {
       reduced_motion:   persist.reducedMotion   || false,
     };
 
-    const { error } = await _supabase
+    // 加入超時機制，避免無限等待
+    const upsertPromise = _supabase
       .from('user_progress')
       .upsert(payload, { onConflict: 'user_id' });
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('upsert timeout after 10s')), 10000)
+    );
 
+    const { error } = await Promise.race([upsertPromise, timeoutPromise]);
     if (error) throw error;
     showSyncStatus('✓ 已同步', 'grass');
     console.log('[Sync] 進度已推送至雲端');
