@@ -92,9 +92,16 @@ function scheduleSyncToCloud() {
 
 // ── 推送進度到雲端 ────────────────────────────────────────────────────
 async function pushProgressToCloud() {
-  if (!isLoggedIn() || !_supabase) return;
+  console.log('[Sync-debug] pushProgressToCloud called, isLoggedIn:', isLoggedIn(), '_supabase:', !!_supabase, 'appState:', typeof appState);
+  if (!isLoggedIn() || !_supabase) {
+    console.warn('[Sync-debug] early return: isLoggedIn=', isLoggedIn(), '_supabase=', !!_supabase);
+    return;
+  }
   // appState 由主應用提供（全域變數）
-  if (typeof appState === 'undefined') return;
+  if (typeof appState === 'undefined') {
+    console.warn('[Sync-debug] early return: appState undefined');
+    return;
+  }
 
   try {
     const persist = { ...appState };
