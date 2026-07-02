@@ -30,7 +30,7 @@ function initSupabase() {
 
   // 監聽 Auth 狀態變化（登入/登出/Token 刷新）
   _supabase.auth.onAuthStateChange(async (event, session) => {
-    console.log('[Sync] Auth event:', event);
+    // Auth state change
     _currentUser = session?.user ?? null;
     updateAuthUI();
 
@@ -122,7 +122,7 @@ async function pushProgressToCloud() {
     const { error } = await Promise.race([upsertPromise, timeoutPromise]);
     if (error) throw error;
     showSyncStatus('✓ 已同步', 'grass');
-    console.log('[Sync] 進度已推送至雲端');
+
   } catch (err) {
     console.warn('[Sync] 推送失敗：', err.message);
     showSyncStatus('同步失敗', 'coral');
@@ -145,7 +145,7 @@ async function pullAndMergeProgress() {
 
     if (!data) {
       // 首次登入：將本地進度上傳到雲端
-      console.log('[Sync] 首次登入，上傳本地進度');
+  
       await pushProgressToCloud();
       showSyncStatus('✓ 本地進度已備份', 'grass');
       return;
@@ -176,7 +176,7 @@ async function pullAndMergeProgress() {
 
     if (cloudScore > localScore) {
       // 雲端進度更多：用雲端覆蓋本地
-      console.log('[Sync] 雲端進度更多，覆蓋本地');
+
       if (typeof appState !== 'undefined') {
         Object.assign(appState, cloudState);
         appState._todayLearnedQueue = [];
@@ -262,10 +262,20 @@ function showAuthModal() {
         const email = emailEl.value.trim();
         const pass  = passEl.value;
         if (!email || !pass) { showError('請輸入郵件和密碼'); return; }
-        root.querySelector('#auth-signin').textContent = '登入中…';
+        // 清除舊錯誤訊息
+        errorEl.classList.add('hidden');
+        errorEl.textContent = '';
+        const signinBtn = root.querySelector('#auth-signin');
+        signinBtn.textContent = '登入中…';
+        signinBtn.disabled = true;
         const { error } = await _supabase.auth.signInWithPassword({ email, password: pass });
-        if (error) { showError(error.message); root.querySelector('#auth-signin').textContent = '登入'; }
-        else { if (typeof closeModal === 'function') closeModal(); }
+        if (error) {
+          showError(error.message);
+          signinBtn.textContent = '登入';
+          signinBtn.disabled = false;
+        } else {
+          if (typeof closeModal === 'function') closeModal();
+        }
       });
 
       root.querySelector('#auth-signup').addEventListener('click', async () => {
