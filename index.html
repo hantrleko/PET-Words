@@ -4,6 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#4FC3F7" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="PET Kids" />
+  <meta name="description" content="专为 PET B1 备考设计的儿童单词学习 App，40天学完全部词汇，支持云端同步" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <title>PET Kids · 40天单词挑战</title>
 
   <!-- ===== Tailwind CSS (CDN) — 多镜像容灾 ===== -->
@@ -190,6 +198,62 @@
     .vocab-word { font-size: 52px; }
     .container-kid { max-width: 560px; margin: 0 auto; }
   }
+
+  /* ===== TTS 朗讀動畫 ===== */
+  @keyframes speakPulse {
+    0%, 100% { box-shadow: 0 6px 0 rgba(0,0,0,.08), 0 0 0 0 rgba(79,195,247,0); }
+    50% { box-shadow: 0 6px 0 rgba(0,0,0,.08), 0 0 0 8px rgba(79,195,247,.25); }
+  }
+  .speaking {
+    animation: speakPulse 0.8s ease-in-out infinite !important;
+    background: var(--sky) !important;
+    color: #fff !important;
+  }
+
+  /* ===== 按鈕波紋效果 ===== */
+  .kid-btn { position: relative; overflow: hidden; }
+  .kid-btn::after {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle, rgba(255,255,255,.4) 0%, transparent 70%);
+    opacity: 0; transform: scale(0);
+    transition: opacity .4s ease, transform .4s ease;
+    pointer-events: none;
+  }
+  .kid-btn:active::after { opacity: 1; transform: scale(2.5); transition: none; }
+
+  /* ===== 卡片 hover 浮起效果 ===== */
+  .kid-card { transition: transform .2s ease, box-shadow .2s ease; }
+  .kid-card:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(0,0,0,.09); }
+
+  /* ===== 選擇题按鈕點擊動畫 ===== */
+  .choice-btn { position: relative; overflow: hidden; }
+
+  /* ===== 輸入框焦點動畫 ===== */
+  #spell-input:focus {
+    box-shadow: 0 0 0 3px rgba(79,195,247,.25);
+    transition: box-shadow .2s ease;
+  }
+
+  /* ===== 小徽章解鎖動畫 ===== */
+  @keyframes badgeUnlock {
+    0% { transform: scale(0) rotate(-15deg); opacity: 0; }
+    60% { transform: scale(1.2) rotate(5deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0); opacity: 1; }
+  }
+  .badge-tile.just-unlocked { animation: badgeUnlock .5s cubic-bezier(.34,1.56,.64,1); }
+
+  /* ===== 進度條充入動畫 ===== */
+  #learn-progress-fill, #overall-progress-fill, #test-progress-fill {
+    transition: width .6s cubic-bezier(.34,1.56,.64,1);
+  }
+
+  /* ===== 同步狀態指示器動畫 ===== */
+  @keyframes syncPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  #sync-status-text:not(:empty) { animation: syncPulse 1.5s ease-in-out infinite; }
+  #sync-status-text.synced { animation: none; }
   </style>
 
   <script>
@@ -1356,6 +1420,9 @@ function showPage(name) {
  * 6. TTS 发音
  * ===================================================================== */
 let voicesCache = [];
+let _ttsLang = 'en-US';  // 可切換：en-US / en-GB
+let _ttsRate = 0.85;     // 語速：0.6（慢）/ 0.85（正常）/ 1.1（快）
+
 function loadVoices() {
   if ('speechSynthesis' in window) {
     voicesCache = speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
@@ -1366,16 +1433,46 @@ if ('speechSynthesis' in window) {
   speechSynthesis.onvoiceschanged = loadVoices;
 }
 
-function speak(text) {
+// 選擇最佳語音：優先選 Neural/Premium/Enhanced 品質
+function pickBestVoice(lang) {
+  const pool = voicesCache.filter(v => v.lang.startsWith(lang.split('-')[0]));
+  const exact = pool.filter(v => v.lang === lang);
+  // 優先選高品質語音
+  const quality = ['neural', 'premium', 'enhanced', 'natural'];
+  for (const q of quality) {
+    const found = exact.find(v => v.name.toLowerCase().includes(q)) ||
+                  pool.find(v => v.name.toLowerCase().includes(q));
+    if (found) return found;
+  }
+  return exact[0] || pool[0] || voicesCache[0];
+}
+
+function speak(text, rate) {
   if (!('speechSynthesis' in window)) return;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'en-US';
-  u.rate = 0.85;
-  u.pitch = 1.1;
-  const v = voicesCache.find(v => v.default) || voicesCache[0];
+  u.lang = _ttsLang;
+  u.rate = rate || _ttsRate;
+  u.pitch = 1.0;
+  const v = pickBestVoice(_ttsLang);
   if (v) u.voice = v;
+  // 朗讀中：給按鈕加動畫
+  u.onstart = () => {
+    document.querySelectorAll('#learn-btn-speak, #spell-speak').forEach(btn => {
+      btn.classList.add('speaking');
+    });
+  };
+  u.onend = u.onerror = () => {
+    document.querySelectorAll('#learn-btn-speak, #spell-speak').forEach(btn => {
+      btn.classList.remove('speaking');
+    });
+  };
   speechSynthesis.speak(u);
+}
+
+// 朗讀例句（語速稍慢）
+function speakSentence(text) {
+  speak(text, Math.min(_ttsRate, 0.75));
 }
 
 /* =====================================================================
@@ -1514,23 +1611,45 @@ function renderLearnCard() {
     return;
   }
   const w = learnQueue[learnIdx];
+  // 卡片滑入動畫
+  area.style.opacity = '0';
+  area.style.transform = 'translateX(30px)';
   area.innerHTML = `
     <div class="flex justify-between items-center mb-3">
       <span class="text-xs font-bold text-sky bg-sky/10 px-3 py-1 rounded-full">${w.topic}</span>
       <span class="text-xs font-bold text-gray-400">${w.pos} · ${w.frequency}</span>
     </div>
     <div class="flex-1 flex flex-col items-center justify-center text-center">
-      <p class="vocab-word text-ink">${w.word}</p>
+      <p class="vocab-word text-ink select-all cursor-pointer" title="點擊對比拼寫">${w.word}</p>
       <p class="vocab-phonetic mt-2">${w.phonetic}</p>
-      <div class="my-4 text-5xl">${topicEmoji(w.topic)}</div>
+      <div class="my-3 text-5xl select-none">${topicEmoji(w.topic)}</div>
       <p class="text-lg font-bold text-coral">${w.definition_cn}</p>
       <p class="text-sm text-gray-400 mt-1">${w.definition_en}</p>
-      <div class="kid-card bg-soft p-3 mt-4 w-full text-left">
-        <p class="text-sm text-ink font-semibold">📖 ${w.example_en}</p>
-        <p class="text-xs text-gray-400 mt-1">${w.example_cn}</p>
+      <div class="kid-card bg-soft p-3 mt-4 w-full text-left cursor-pointer hover:bg-sky/5 transition-colors" id="learn-example-card" title="點擊朗讀例句">
+        <div class="flex items-start gap-2">
+          <button class="text-sky text-sm flex-shrink-0 mt-0.5" id="learn-btn-sentence" title="朗讀例句"><i class="fa-solid fa-play-circle"></i></button>
+          <div>
+            <p class="text-sm text-ink font-semibold">${w.example_en}</p>
+            <p class="text-xs text-gray-400 mt-1">${w.example_cn}</p>
+          </div>
+        </div>
       </div>
     </div>
+    <p class="text-center text-xs text-gray-300 mt-3 select-none">← 左向鍵下一個 · M 已掌握 · S 朗讀 →</p>
   `;
+  // 動畫滑入
+  requestAnimationFrame(() => {
+    area.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+    area.style.opacity = '1';
+    area.style.transform = 'translateX(0)';
+  });
+  // 例句按鈕事件
+  setTimeout(() => {
+    const sentBtn = document.getElementById('learn-btn-sentence');
+    if (sentBtn) sentBtn.addEventListener('click', (e) => { e.stopPropagation(); speakSentence(w.example_en); });
+    const exCard = document.getElementById('learn-example-card');
+    if (exCard) exCard.addEventListener('click', () => speakSentence(w.example_en));
+  }, 50);
   speak(w.word);
 }
 
@@ -2256,6 +2375,39 @@ function bindEvents() {
   if (btnAuth) btnAuth.addEventListener('click', () => { if (window.PetSync) window.PetSync.showAuthModal(); });
   const btnCloudSync = $('#btn-cloud-sync');
   if (btnCloudSync) btnCloudSync.addEventListener('click', () => { if (window.PetSync) window.PetSync.showAuthModal(); });
+
+  // ===== 全局鍵盤快捷鍵 =====
+  document.addEventListener('keydown', function(e) {
+    const tag = document.activeElement ? document.activeElement.tagName : '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if ($('#modal-root') && $('#modal-root').innerHTML) return;
+    const activePage = document.querySelector('.page.active');
+    const pageId = activePage ? activePage.id : '';
+
+    if (pageId === 'page-learn') {
+      if (e.key === ' ' || e.key === 'ArrowRight') {
+        e.preventDefault(); learnNext();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (learnIdx > 0) { learnIdx--; renderLearnCard(); }
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault(); learnMastered();
+      } else if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        if (learnQueue[learnIdx]) speak(learnQueue[learnIdx].word);
+      } else if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        if (learnQueue[learnIdx]) speakSentence(learnQueue[learnIdx].example_en);
+      }
+    }
+    if (pageId === 'page-practice') {
+      if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        if (practiceQueue[practiceIdx]) speak(practiceQueue[practiceIdx].word);
+      }
+    }
+    if (e.key === 'Escape') { closeModal(); }
+  });
 }
 
 function init() {
@@ -2414,6 +2566,29 @@ function init() {
 
   tryFetch(0);
 })();
+
+  // ===== PWA Service Worker 注册 =====
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('sw.js', { scope: '/PET-Words/' })
+        .then(function(reg) {
+          console.log('[PWA] Service Worker registered, scope:', reg.scope);
+          // 检查更新
+          reg.addEventListener('updatefound', function() {
+            var newWorker = reg.installing;
+            newWorker.addEventListener('statechange', function() {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // 有新版本可用，提示用户刷新
+                console.log('[PWA] New version available');
+              }
+            });
+          });
+        })
+        .catch(function(err) {
+          console.warn('[PWA] Service Worker registration failed:', err);
+        });
+    });
+  }
   </script>
 </body>
 </html>

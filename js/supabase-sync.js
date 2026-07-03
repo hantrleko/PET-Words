@@ -72,13 +72,17 @@ function updateAuthUI() {
 // ── 顯示同步狀態提示 ─────────────────────────────────────────────────
 function showSyncStatus(msg, color = 'sky') {
   const el = document.getElementById('sync-status-text');
-  if (el) {
-    el.textContent = msg;
-    el.className = `text-xs text-${color}-500 font-semibold`;
-    // 3 秒後淡出
-    clearTimeout(el._fadeTimer);
-    el._fadeTimer = setTimeout(() => { el.textContent = ''; }, 3000);
-  }
+  if (!el) return;
+  el.textContent = msg;
+  const isSynced = color === 'grass';
+  el.className = 'text-xs font-semibold ' + (isSynced ? 'text-green-500 synced' : color === 'coral' ? 'text-red-400' : 'text-sky-500');
+  clearTimeout(el._fadeTimer);
+  const delay = isSynced ? 5000 : 4000;
+  el._fadeTimer = setTimeout(() => {
+    el.style.transition = 'opacity 0.5s';
+    el.style.opacity = '0';
+    setTimeout(() => { el.textContent = ''; el.style.opacity = '1'; el.style.transition = ''; }, 500);
+  }, delay);
 }
 
 // ── 防抖雲端寫入（每次 saveState 後呼叫） ───────────────────────────
@@ -196,6 +200,20 @@ async function pullAndMergeProgress() {
   }
 }
 
+// ── Auth 錯誤訊息翻譯（英文 → 中文）────────────────────────────────
+function translateAuthError(msg) {
+  if (!msg) return '未知錯誤';
+  const m = msg.toLowerCase();
+  if (m.includes('invalid login credentials') || m.includes('invalid credentials')) return '郵件或密碼錯誤，請重試';
+  if (m.includes('email not confirmed')) return '請先驗證您的電子郵件';
+  if (m.includes('user already registered') || m.includes('already been registered')) return '此郵件已經注冊，請直接登入';
+  if (m.includes('password should be at least')) return '密碼至少需要 6 位';
+  if (m.includes('rate limit') || m.includes('too many requests')) return '請求太頻繁，請稍後再試';
+  if (m.includes('network') || m.includes('fetch')) return '網路連線失敗，請檢查網路';
+  if (m.includes('signup is disabled')) return '注冊功能暫時關閉';
+  return msg; // 其他錯誤直接顯示原文
+}
+
 // ── 登入彈窗 ──────────────────────────────────────────────────────────
 function showAuthModal() {
   if (!_supabase) {
@@ -231,7 +249,10 @@ function showAuthModal() {
 
     <div class="grid grid-cols-2 gap-3 mt-4">
       <button id="auth-signin" class="kid-btn kid-btn-primary h-12 text-sm">登入</button>
-      <button id="auth-signup" class="kid-btn kid-btn-ghost h-12 text-sm">注冊</button>
+      <button id="auth-signup" class="kid-btn kid-btn-grass h-12 text-sm">注冊</button>
+    </div>
+    <div class="text-right mt-1">
+      <button id="auth-forgot" class="text-xs text-sky-500 font-semibold hover:underline">忘記密碼？</button>
     </div>
 
     <div class="relative my-4">
@@ -270,7 +291,7 @@ function showAuthModal() {
         signinBtn.disabled = true;
         const { error } = await _supabase.auth.signInWithPassword({ email, password: pass });
         if (error) {
-          showError(error.message);
+          showError(translateAuthError(error.message));
           signinBtn.textContent = '登入';
           signinBtn.disabled = false;
         } else {
@@ -313,6 +334,26 @@ function showAuthModal() {
             if (typeof closeModal === 'function') closeModal();
             showSyncStatus('✓ 注冊並登入成功', 'grass');
           }
+        }
+      });
+
+      root.querySelector('#auth-forgot').addEventListener('click', async () => {
+        const email = emailEl.value.trim();
+        if (!email) { showError('請先輸入您的電子郵件'); return; }
+        const forgotBtn = root.querySelector('#auth-forgot');
+        forgotBtn.textContent = '發送中…';
+        forgotBtn.disabled = true;
+        const { error } = await _supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin + window.location.pathname + '?reset=1'
+        });
+        forgotBtn.disabled = false;
+        forgotBtn.textContent = '忘記密碼？';
+        if (error) {
+          showError(translateAuthError(error.message));
+        } else {
+          errorEl.className = 'text-grass text-xs mt-2 p-2 bg-grass/10 rounded-xl';
+          errorEl.textContent = '密碼重設郵件已發送！請查收您的電子郵件。';
+          errorEl.classList.remove('hidden');
         }
       });
 
