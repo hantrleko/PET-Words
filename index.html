@@ -2454,6 +2454,12 @@ function init() {
 
   var candidates = [];
 
+  // 候選組0：標準相對路徑（GitHub Pages / 本地開發首選）
+  candidates.push(baseDir + 'js/vocab-data.js');
+  var pathDir0 = location.pathname.replace(/[?#].*$/, '').replace(/\/[^\/]*$/, '/');
+  var jsCandidate = location.origin + pathDir0 + 'js/vocab-data.js';
+  if (candidates.indexOf(jsCandidate) === -1) candidates.push(jsCandidate);
+
   // 候选组1：Genspark 发布环境的静态文件接口（按可能性排序）
   if (pageId) {
     // 最有可能的格式
