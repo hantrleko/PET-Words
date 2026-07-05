@@ -4,7 +4,7 @@
  * 策略：Cache First（靜態資源）+ Network First（API 請求）
  * ===================================================================== */
 
-const CACHE_NAME = 'pet-kids-v1';
+const CACHE_NAME = 'pet-kids-v3';  // 每次有重大更新時遞增
 const OFFLINE_URL = '/PET-Words/';
 
 // 預快取的核心靜態資源
@@ -12,9 +12,7 @@ const PRECACHE_URLS = [
   '/PET-Words/',
   '/PET-Words/index.html',
   '/PET-Words/js/supabase-sync.js',
-  '/PET-Words/js/app.js',
   '/PET-Words/js/vocab-data.js',
-  '/PET-Words/css/style.css',
   '/PET-Words/manifest.json',
   '/PET-Words/icons/icon-192.png',
   '/PET-Words/icons/icon-512.png',

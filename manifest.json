@@ -30,14 +30,14 @@
       "name": "今日学习",
       "short_name": "学习",
       "description": "开始今日单词学习",
-      "url": "/PET-Words/#learn",
+      "url": "/PET-Words/?page=learn",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "练习中心",
       "short_name": "练习",
       "description": "进入练习中心",
-      "url": "/PET-Words/#practice",
+      "url": "/PET-Words/?page=practice",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
     }
   ]

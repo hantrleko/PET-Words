@@ -377,6 +377,18 @@
         </div>
         <i class="fa-solid fa-chevron-right text-gray-300"></i>
       </button>
+
+      <!-- 词汇搜索快捷入口 -->
+      <button id="btn-vocab-search" class="kid-card w-full p-4 mb-2 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span class="w-11 h-11 rounded-2xl bg-sky/15 flex items-center justify-center"><i class="fa-solid fa-magnifying-glass text-sky text-lg"></i></span>
+          <div class="text-left">
+            <p class="font-bold text-ink">词汇查询</p>
+            <p class="text-xs text-gray-400">搜索 2300 个单词、释义、主题</p>
+          </div>
+        </div>
+        <i class="fa-solid fa-chevron-right text-gray-300"></i>
+      </button>
     </section>
 
     <!-- ============================================================ -->
@@ -1221,6 +1233,8 @@ function defaultState() {
     wrongWords: [],
     stats: { spellingCorrect: 0, testPerfectCount: 0 },
     reducedMotion: false,
+    ttsLang: 'en-US',
+    ttsRate: 0.85,
     _todayLearnedQueue: [],
   };
 }
@@ -1929,26 +1943,89 @@ function renderVocabList(query, topic = 'all') {
   const q = norm(query);
   const list = VOCAB.filter(w => {
     const matchTopic = topic === 'all' || w.topic === topic;
-    const matchQ = !q || norm(w.word).includes(q) || norm(w.definition_cn).includes(q);
+    const matchQ = !q || norm(w.word).includes(q) || norm(w.definition_cn).includes(q) || norm(w.topic).includes(q);
     return matchTopic && matchQ;
   });
-  $('#vocab-list').innerHTML = list.map(w => {
+  const container = $('#vocab-list');
+  container.innerHTML = list.map(w => {
     const m = masteryOf(w.id);
     const lvl = m.level || 0;
     const dots = '●'.repeat(lvl) + '○'.repeat(5 - lvl);
-    const wrongTag = appState.wrongWords.includes(w.id) ? '<span class="text-coral text-xs">错</span>' : '';
+    const isWrong = appState.wrongWords.includes(w.id);
     return `
-      <div class="kid-card p-3 flex items-center justify-between">
-        <div class="text-left">
-          <p class="font-bold text-ink">${w.word} ${wrongTag}</p>
-          <p class="text-xs text-gray-400">${w.phonetic} · ${w.definition_cn}</p>
+      <div class="kid-card p-3 vocab-item" data-id="${w.id}">
+        <div class="flex items-center justify-between">
+          <div class="text-left flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <p class="font-bold text-ink">${w.word}</p>
+              ${isWrong ? '<span class="text-xs bg-coral/15 text-coral px-1.5 py-0.5 rounded-full">错题</span>' : ''}
+              <span class="text-xs bg-sky/10 text-sky px-1.5 py-0.5 rounded-full">${w.topic}</span>
+            </div>
+            <p class="text-xs text-gray-400 mt-0.5">${w.phonetic} · ${w.definition_cn}</p>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <p class="text-xs text-grass font-bold tracking-wider">${dots}</p>
+            <button class="text-sky text-sm vocab-speak-btn" data-word="${w.word.replace(/"/g, '&quot;')}" title="服读"><i class="fa-solid fa-volume-high"></i></button>
+            <button class="text-gray-300 text-sm vocab-expand-btn" title="展开详情"><i class="fa-solid fa-chevron-down"></i></button>
+          </div>
         </div>
-        <div class="text-right">
-          <p class="text-xs text-grass font-bold tracking-wider">${dots}</p>
-          <button class="text-sky text-xs mt-1" onclick="speak('${w.word.replace(/'/g, "\\'")}')"><i class="fa-solid fa-volume-high"></i></button>
+        <!-- 展開詳情區塊 -->
+        <div class="vocab-detail hidden mt-3 pt-3 border-t border-gray-100">
+          <p class="text-xs text-gray-500 italic">“${w.example_en}”</p>
+          <p class="text-xs text-gray-400 mt-1">${w.example_cn}</p>
+          <div class="flex gap-2 mt-3">
+            <button class="vocab-wrong-toggle flex-1 kid-btn h-9 text-xs ${isWrong ? 'kid-btn-primary' : 'kid-btn-ghost'}" data-id="${w.id}">
+              ${isWrong ? '✖ 移出错题本' : '+ 加入错题本'}
+            </button>
+            <button class="flex-1 kid-btn kid-btn-ghost h-9 text-xs vocab-sentence-btn" data-sentence="${w.example_en.replace(/"/g, '&quot;')}">
+              <i class="fa-solid fa-play-circle text-sky"></i> 服读例句
+            </button>
+          </div>
         </div>
       </div>`;
   }).join('') || '<p class="text-gray-400 text-center py-6 text-sm">没有找到单词</p>';
+
+  // 事件委托（防止重複綁定）
+  container.onclick = null;
+  container.addEventListener('click', function(e) {
+    const item = e.target.closest('.vocab-item');
+    if (!item) return;
+    // 服读按鈕
+    const speakBtn = e.target.closest('.vocab-speak-btn');
+    if (speakBtn) { e.stopPropagation(); speak(speakBtn.dataset.word); return; }
+    // 服读例句按鈕
+    const sentBtn = e.target.closest('.vocab-sentence-btn');
+    if (sentBtn) { e.stopPropagation(); speakSentence(sentBtn.dataset.sentence); return; }
+    // 错题本切換
+    const wrongBtn = e.target.closest('.vocab-wrong-toggle');
+    if (wrongBtn) {
+      e.stopPropagation();
+      const wid = wrongBtn.dataset.id;
+      const idx = appState.wrongWords.indexOf(wid);
+      if (idx >= 0) {
+        appState.wrongWords.splice(idx, 1);
+        wrongBtn.textContent = '+ 加入错题本';
+        wrongBtn.classList.remove('kid-btn-primary'); wrongBtn.classList.add('kid-btn-ghost');
+        // 更新错词标签
+        const tag = item.querySelector('.text-xs.bg-coral\/15');
+        if (tag) tag.remove();
+      } else {
+        appState.wrongWords.push(wid);
+        wrongBtn.textContent = '✖ 移出错题本';
+        wrongBtn.classList.add('kid-btn-primary'); wrongBtn.classList.remove('kid-btn-ghost');
+      }
+      saveState();
+      return;
+    }
+    // 展開/收起詳情
+    const expandBtn = e.target.closest('.vocab-expand-btn');
+    const detail = item.querySelector('.vocab-detail');
+    const icon = item.querySelector('.vocab-expand-btn i');
+    if (detail) {
+      detail.classList.toggle('hidden');
+      if (icon) icon.className = detail.classList.contains('hidden') ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-up';
+    }
+  }, { once: false });
 }
 
 function startReviewMode(mode) {
@@ -2274,30 +2351,94 @@ function resetProgress() {
  * 19. 设置 / 教程 / 帮助
  * ===================================================================== */
 function showSettings() {
+  const ttsLangVal = appState.ttsLang || 'en-US';
+  const ttsRateVal = appState.ttsRate || 0.85;
   const html = `
     <span class="mascot lg">🦊</span>
     <h3 class="text-2xl font-extrabold text-ink mt-2">设置</h3>
     <div class="text-left mt-4 space-y-3">
+
+      <!-- TTS 語音設定 -->
+      <div class="kid-card p-3">
+        <p class="text-xs font-bold text-gray-400 mb-2"><i class="fa-solid fa-volume-high text-sky"></i> 语音发音</p>
+        <div class="flex gap-2">
+          <button class="tts-lang-btn flex-1 kid-btn h-10 text-xs ${ttsLangVal === 'en-US' ? 'kid-btn-primary' : 'kid-btn-ghost'}" data-lang="en-US">🇺🇸 美式</button>
+          <button class="tts-lang-btn flex-1 kid-btn h-10 text-xs ${ttsLangVal === 'en-GB' ? 'kid-btn-primary' : 'kid-btn-ghost'}" data-lang="en-GB">🇬🇧 英式</button>
+        </div>
+      </div>
+
+      <!-- TTS 語速設定 -->
+      <div class="kid-card p-3">
+        <p class="text-xs font-bold text-gray-400 mb-2"><i class="fa-solid fa-gauge text-sky"></i> 语速</p>
+        <div class="flex gap-2">
+          <button class="tts-rate-btn flex-1 kid-btn h-10 text-xs ${ttsRateVal <= 0.65 ? 'kid-btn-primary' : 'kid-btn-ghost'}" data-rate="0.6">🐢 慢</button>
+          <button class="tts-rate-btn flex-1 kid-btn h-10 text-xs ${ttsRateVal > 0.65 && ttsRateVal < 1.0 ? 'kid-btn-primary' : 'kid-btn-ghost'}" data-rate="0.85">正常</button>
+          <button class="tts-rate-btn flex-1 kid-btn h-10 text-xs ${ttsRateVal >= 1.0 ? 'kid-btn-primary' : 'kid-btn-ghost'}" data-rate="1.1">🚀 快</button>
+        </div>
+      </div>
+
+      <!-- 动画开关 -->
       <label class="flex items-center justify-between kid-card p-3">
         <span class="text-sm font-bold text-ink">减少动画</span>
         <input id="setting-motion" type="checkbox" ${appState.reducedMotion ? 'checked' : ''} class="w-6 h-6 accent-sky" />
       </label>
+
       <button id="setting-tutorial" class="kid-btn kid-btn-ghost w-full h-12 text-sm"><i class="fa-solid fa-graduation-cap"></i> 查看新手教程</button>
+      <button id="setting-clear-cache" class="kid-btn kid-btn-ghost w-full h-12 text-sm text-coral"><i class="fa-solid fa-broom"></i> 清除应用缓存</button>
       <button id="setting-about" class="kid-btn kid-btn-ghost w-full h-12 text-sm"><i class="fa-solid fa-circle-info"></i> 关于</button>
     </div>
     <button class="modal-ok kid-btn kid-btn-primary w-full h-14 mt-5">完成</button>
   `;
   showModal(html, root => {
+    // TTS 語音切換
+    $$('.tts-lang-btn', root).forEach(btn => {
+      btn.addEventListener('click', () => {
+        $$('.tts-lang-btn', root).forEach(b => { b.classList.remove('kid-btn-primary'); b.classList.add('kid-btn-ghost'); });
+        btn.classList.add('kid-btn-primary'); btn.classList.remove('kid-btn-ghost');
+        _ttsLang = btn.dataset.lang;
+        appState.ttsLang = _ttsLang;
+        saveState();
+        speak('Hello, let me try this voice!', 0.85);
+      });
+    });
+    // TTS 語速切換
+    $$('.tts-rate-btn', root).forEach(btn => {
+      btn.addEventListener('click', () => {
+        $$('.tts-rate-btn', root).forEach(b => { b.classList.remove('kid-btn-primary'); b.classList.add('kid-btn-ghost'); });
+        btn.classList.add('kid-btn-primary'); btn.classList.remove('kid-btn-ghost');
+        _ttsRate = parseFloat(btn.dataset.rate);
+        appState.ttsRate = _ttsRate;
+        saveState();
+        speak('Testing speed!', _ttsRate);
+      });
+    });
+    // 动画开关
     $('#setting-motion', root).addEventListener('change', e => {
       appState.reducedMotion = e.target.checked;
       document.body.classList.toggle('reduce-motion', appState.reducedMotion);
       saveState();
     });
     $('#setting-tutorial', root).addEventListener('click', () => { closeModal(); showTutorial(); });
+    // 清除快取
+    $('#setting-clear-cache', root).addEventListener('click', () => {
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = () => {
+          showResultModal('缓存已清除', '<p class="text-sm">应用缓存已清除，页面将重新加载最新版本。</p>', { mascot: '🦊' });
+          setTimeout(() => location.reload(), 1500);
+        };
+        navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_CACHE' }, [channel.port2]);
+      } else {
+        caches.keys().then(names => Promise.all(names.map(n => caches.delete(n)))).then(() => {
+          showResultModal('缓存已清除', '<p class="text-sm">应用缓存已清除。</p>', { mascot: '🦊' });
+          setTimeout(() => location.reload(), 1500);
+        });
+      }
+    });
     $('#setting-about', root).addEventListener('click', () => {
       $('#modal-root .modal-box').querySelector('h3').nextElementSibling.innerHTML = `
         <p class="text-sm text-gray-500 text-left">PET Kids 40天单词挑战 · 儿童友好型英语词汇学习 Web App</p>
-        <p class="text-xs text-gray-400 text-left mt-2">基于 Cambridge PET B1 词汇，融合间隔重复、多模态练习与游戏化奖励。</p>`;
+        <p class="text-xs text-gray-400 text-left mt-2">基于 Cambridge PET B1 词汇，融合间隔重复、多模态练习与游戲化奖励。</p>`;
     });
     $('.modal-ok', root).addEventListener('click', closeModal);
   });
@@ -2346,6 +2487,10 @@ function bindEvents() {
 
   $('#btn-start-today').addEventListener('click', () => showPage('learn'));
   $('#btn-quick-review').addEventListener('click', () => startReviewMode('wrong'));
+  $('#btn-vocab-search').addEventListener('click', () => {
+    showPage('review');
+    setTimeout(() => { const s = $('#vocab-search'); if (s) { s.focus(); s.select(); } }, 200);
+  });
   $('#btn-settings').addEventListener('click', showSettings);
   $('#btn-help').addEventListener('click', showHelp);
 
@@ -2422,6 +2567,9 @@ function init() {
   }
   PLAN = buildPlan();
   document.body.classList.toggle('reduce-motion', appState.reducedMotion);
+  // 同步 TTS 偏好設定
+  _ttsLang = appState.ttsLang || 'en-US';
+  _ttsRate = appState.ttsRate || 0.85;
   bindEvents();
   advanceDayIfNeeded();
   showPage('home');
@@ -2433,6 +2581,12 @@ function init() {
   if (window.PetSync) {
     const ok = window.PetSync.init();
     if (ok) console.log('[PET] Supabase 雲端同步已啟動');
+  }
+  // PWA Shortcuts 的 query param 路由支援
+  const urlParams = new URLSearchParams(location.search);
+  const targetPage = urlParams.get('page');
+  if (targetPage && ['learn', 'practice', 'review', 'test', 'progress', 'rewards', 'plan'].includes(targetPage)) {
+    setTimeout(() => showPage(targetPage), 100);
   }
 }
 
