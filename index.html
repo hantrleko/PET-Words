@@ -249,6 +249,27 @@
     transition: width .6s cubic-bezier(.34,1.56,.64,1);
   }
 
+  /* ===== 數字滾動動畫 ===== */
+  @keyframes numRoll {
+    from { transform: translateY(-60%); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+  .num-roll { display: inline-block; animation: numRoll .35s cubic-bezier(.34,1.56,.64,1); }
+
+  /* ===== 今日進度橫幅 ===== */
+  #learn-today-banner {
+    background: linear-gradient(90deg, rgba(79,195,247,.12), rgba(129,199,132,.12));
+    border-radius: 14px; padding: 8px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  /* ===== 錯題篩選按鈕激活 ===== */
+  #btn-wrong-filter.active {
+    background: var(--coral); color: #fff;
+    box-shadow: 0 4px 0 rgba(255,138,101,.3);
+  }
+
   /* ===== 同步狀態指示器動畫 ===== */
   @keyframes syncPulse {
     0%, 100% { opacity: 1; }
@@ -401,6 +422,15 @@
         <div class="w-10"></div>
       </header>
 
+      <!-- 今日進度橫幅 -->
+      <div id="learn-today-banner">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-fire text-coral text-sm"></i>
+          <span class="text-xs font-bold text-ink">今日已學 <span id="learn-today-done" class="text-sky font-extrabold">0</span>/<span id="learn-today-total" class="text-gray-400">0</span> 個單字</span>
+        </div>
+        <span class="text-xs font-bold text-grass" id="learn-today-pct">0%</span>
+      </div>
+
       <!-- 今日新词进度 -->
       <div class="mb-3">
         <div class="flex justify-between text-xs font-bold text-gray-400 mb-1">
@@ -517,6 +547,13 @@
           <input id="vocab-search" type="text" placeholder="搜索单词或释义…"
                  class="w-full pl-11 pr-4 py-3 rounded-2xl border-2 border-sky/20 focus:outline-none focus:border-sky font-semibold" />
         </div>
+        <!-- 筛選列 -->
+        <div class="flex items-center gap-2 mb-3">
+          <button id="btn-wrong-filter" class="kid-btn kid-btn-ghost h-9 text-xs px-3 flex items-center gap-1">
+            <i class="fa-solid fa-circle-xmark text-coral"></i> 只看錯題 (<span id="wrong-filter-count">0</span>)
+          </button>
+          <span class="text-xs text-gray-300">|主題筛選：</span>
+        </div>
         <div class="flex flex-wrap gap-2 mb-3" id="topic-filters"></div>
         <div id="vocab-list" class="max-h-[360px] overflow-y-auto space-y-2 pr-1"></div>
       </div>
@@ -590,6 +627,34 @@
         </div>
       </div>
 
+      <!-- 学习统计摘要 -->
+      <div class="kid-card p-4 mb-4">
+        <p class="font-bold text-ink text-sm mb-3"><i class="fa-solid fa-chart-line text-sky"></i> 学习统计</p>
+        <div class="grid grid-cols-3 gap-3 text-center">
+          <div class="bg-soft rounded-2xl p-3">
+            <p class="text-2xl font-extrabold text-sky" id="stat-done-days">0</p>
+            <p class="text-xs text-gray-400 font-semibold mt-1">完成天数</p>
+          </div>
+          <div class="bg-soft rounded-2xl p-3">
+            <p class="text-2xl font-extrabold text-coral" id="stat-wrong-total">0</p>
+            <p class="text-xs text-gray-400 font-semibold mt-1">错题数量</p>
+          </div>
+          <div class="bg-soft rounded-2xl p-3">
+            <p class="text-2xl font-extrabold text-amber-500" id="stat-total-stars-prog">0</p>
+            <p class="text-xs text-gray-400 font-semibold mt-1">累计星星</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 每日学习量折线图 -->
+      <div class="kid-card p-4 mb-4">
+        <div class="flex items-center justify-between mb-2">
+          <p class="font-bold text-ink text-sm"><i class="fa-solid fa-chart-line text-sky"></i> 每日学习量</p>
+          <span class="text-xs text-gray-400">最近 14 天</span>
+        </div>
+        <div style="height:200px;"><canvas id="chart-daily"></canvas></div>
+      </div>
+
       <!-- 掌握率饼图 -->
       <div class="kid-card p-4 mb-4">
         <p class="font-bold text-ink text-sm mb-2"><i class="fa-solid fa-chart-pie text-grass"></i> 掌握率</p>
@@ -602,7 +667,7 @@
         <div style="height:260px;"><canvas id="chart-topic"></canvas></div>
       </div>
 
-      <button id="btn-cloud-sync" class="kid-btn kid-btn-primary w-full h-14 mb-3"><i class="fa-solid fa-cloud-arrow-up"></i> 雲端同步登入</button>
+      <button id="btn-cloud-sync" class="kid-btn kid-btn-primary w-full h-14 mb-3"><i class="fa-solid fa-cloud-arrow-up"></i> <span id="btn-cloud-sync-text">登入并开启雲端同步</span></button>
       <button id="btn-export" class="kid-btn kid-btn-ghost w-full h-14 mb-3"><i class="fa-solid fa-download"></i> 导出进度备份</button>
       <button id="btn-import-vocab" class="kid-btn kid-btn-sun w-full h-14 mb-3"><i class="fa-solid fa-file-import"></i> 导入词库</button>
       <button id="btn-reset" class="kid-btn kid-btn-ghost w-full h-14 text-coral mb-3"><i class="fa-solid fa-trash-can"></i> 重置所有进度</button>
@@ -1565,6 +1630,20 @@ function showCertificate(score) {
 /* =====================================================================
  * 10. 首页 Dashboard 渲染
  * ===================================================================== */
+/* 數字滾動動畫輔助函數 */
+function animateNum(el, newVal) {
+  if (!el) return;
+  const old = el.textContent;
+  if (String(old) === String(newVal)) return;
+  el.textContent = newVal;
+  if (!appState.reducedMotion) {
+    el.classList.remove('num-roll');
+    void el.offsetWidth; // reflow
+    el.classList.add('num-roll');
+    el.addEventListener('animationend', () => el.classList.remove('num-roll'), { once: true });
+  }
+}
+
 function renderHome() {
   const day = appState.currentDay;
   $('#hero-day').textContent = day;
@@ -1576,17 +1655,17 @@ function renderHome() {
   $('#hero-progress').textContent = progPct + '%';
   $('#hero-progress-fill').style.width = progPct + '%';
 
-  $('#stat-streak').textContent = appState.streak;
-  $('#stat-mastered').textContent = masteredCount();
+  animateNum($('#stat-streak'), appState.streak);
+  animateNum($('#stat-mastered'), masteredCount());
   $('#stat-total').textContent = totalVocab();
-  $('#stat-stars-today').textContent = rec.stars || 0;
-  $('#stat-stars-total').textContent = appState.totalStars;
+  animateNum($('#stat-stars-today'), rec.stars || 0);
+  animateNum($('#stat-stars-total'), appState.totalStars);
 
   const doneDays = Object.values(appState.dailyRecords).filter(r => r.completed).length;
   $('#overall-progress-text').textContent = `${doneDays}/${TOTAL_DAYS}`;
   $('#overall-progress-fill').style.width = (doneDays / TOTAL_DAYS * 100) + '%';
 
-  $('#wrong-count').textContent = appState.wrongWords.length;
+  animateNum($('#wrong-count'), appState.wrongWords.length);
   $('#top-progress-fill').style.width = (doneDays / TOTAL_DAYS * 100) + '%';
 }
 
@@ -1602,7 +1681,26 @@ function renderLearnInit() {
   const todo = newWords.filter(w => (masteryOf(w.id).level || 0) === 0);
   learnQueue = todo.length ? todo : newWords;
   learnIdx = 0;
+  updateLearnTodayBanner();
   renderLearnCard();
+}
+
+function updateLearnTodayBanner() {
+  const day = appState.currentDay;
+  const newWords = dayNewWords(day);
+  const rec = appState.dailyRecords[day] || { newLearned: [] };
+  const done = (rec.newLearned || []).length;
+  const total = newWords.length;
+  const pct = total ? Math.round(done / total * 100) : 0;
+  const elDone = $('#learn-today-done');
+  const elTotal = $('#learn-today-total');
+  const elPct = $('#learn-today-pct');
+  if (elDone) elDone.textContent = done;
+  if (elTotal) elTotal.textContent = total;
+  if (elPct) {
+    elPct.textContent = pct + '%';
+    elPct.style.color = pct >= 100 ? 'var(--grass)' : pct >= 50 ? 'var(--sky)' : '#9aa6b2';
+  }
 }
 
 function renderLearnCard() {
@@ -1695,6 +1793,7 @@ function learnNext() {
     addStars(stars);
     rec.stars = (rec.stars || 0) + stars;
     saveState();
+    updateLearnTodayBanner();
     showResultModal('今日单词学完啦！', `<p>你学习了 ${learnQueue.length} 个新词</p><p>去练习中心巩固一下吧！</p>`, { stars, onOk: () => showPage('practice') });
   }
 }
@@ -1921,9 +2020,14 @@ function finishPractice() {
 /* =====================================================================
  * 13. 复习专区 Review
  * ===================================================================== */
+let wrongFilterActive = false;
+
 function renderReview() {
   $('#due-count').textContent = dueReviewIds().length;
   $('#wrong-count-r').textContent = appState.wrongWords.length;
+  // 更新錯題篩選計數
+  const wfCount = $('#wrong-filter-count');
+  if (wfCount) wfCount.textContent = appState.wrongWords.length;
   renderTopicFilters();
   renderVocabList('');
 }
@@ -1935,16 +2039,17 @@ function renderTopicFilters() {
   $$('.topic-chip').forEach(b => b.addEventListener('click', () => {
     $$('.topic-chip').forEach(x => { x.classList.remove('kid-btn-primary'); x.classList.add('kid-btn-ghost'); });
     b.classList.add('kid-btn-primary'); b.classList.remove('kid-btn-ghost');
-    renderVocabList($('#vocab-search').value, b.dataset.topic);
+    renderVocabList($('#vocab-search').value, b.dataset.topic, wrongFilterActive);
   }));
 }
 
-function renderVocabList(query, topic = 'all') {
+function renderVocabList(query, topic = 'all', wrongOnly = false) {
   const q = norm(query);
   const list = VOCAB.filter(w => {
     const matchTopic = topic === 'all' || w.topic === topic;
     const matchQ = !q || norm(w.word).includes(q) || norm(w.definition_cn).includes(q) || norm(w.topic).includes(q);
-    return matchTopic && matchQ;
+    const matchWrong = !wrongOnly || appState.wrongWords.includes(w.id);
+    return matchTopic && matchQ && matchWrong;
   });
   const container = $('#vocab-list');
   container.innerHTML = list.map(w => {
@@ -2143,7 +2248,7 @@ function finishTest() {
 /* =====================================================================
  * 15. 进度页 Progress
  * ===================================================================== */
-let chartMastery = null, chartTopic = null;
+let chartMastery = null, chartTopic = null, chartDaily = null;
 
 function renderProgress() {
   const cal = $('#progress-calendar');
@@ -2186,6 +2291,85 @@ function renderProgress() {
     type: 'bar',
     data: { labels: topics, datasets: [{ label: '掌握率%', data, backgroundColor: '#4FC3F7', borderRadius: 8 }] },
     options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 100, beginAtZero: true } }, plugins: { legend: { display: false } } }
+  });
+
+  // 統計摘要卡片
+  const doneDays = Object.values(appState.dailyRecords).filter(r => r.completed).length;
+  const el_done = $('#stat-done-days');
+  const el_wrong = $('#stat-wrong-total');
+  const el_stars_prog = $('#stat-total-stars-prog');
+  if (el_done) el_done.textContent = doneDays;
+  if (el_wrong) el_wrong.textContent = appState.wrongWords.length;
+  if (el_stars_prog) el_stars_prog.textContent = appState.totalStars;
+
+  // 雲端同步按鈕文字動態切換
+  const cloudSyncText = $('#btn-cloud-sync-text');
+  if (cloudSyncText) {
+    const loggedIn = typeof isLoggedIn === 'function' && isLoggedIn();
+    cloudSyncText.textContent = loggedIn ? '立即同步到雲端' : '登入並開啟雲端同步';
+  }
+
+  // 每日學習量折線圖（最近 14 天）
+  const allDays = Object.keys(appState.dailyRecords).map(Number).sort((a, b) => a - b);
+  const recentDays = allDays.slice(-14);
+  // 如果少於 14 天，補滿空白天數
+  const chartLabels = [];
+  const chartDataWords = [];
+  const chartDataStars = [];
+  for (let i = Math.max(1, allDays.length > 0 ? recentDays[0] : 1); i <= (recentDays.length > 0 ? recentDays[recentDays.length - 1] : 14); i++) {
+    chartLabels.push(`第${i}天`);
+    const rec = appState.dailyRecords[i];
+    chartDataWords.push(rec ? (rec.newLearned || []).length : 0);
+    chartDataStars.push(rec ? (rec.stars || 0) : 0);
+  }
+  // 如果沒有任何記錄，顯示示例數據
+  if (chartLabels.length === 0) {
+    for (let i = 1; i <= 7; i++) { chartLabels.push(`第${i}天`); chartDataWords.push(0); chartDataStars.push(0); }
+  }
+  if (chartDaily) chartDaily.destroy();
+  chartDaily = new Chart($('#chart-daily'), {
+    type: 'line',
+    data: {
+      labels: chartLabels,
+      datasets: [
+        {
+          label: '學習單字數',
+          data: chartDataWords,
+          borderColor: '#4FC3F7',
+          backgroundColor: 'rgba(79,195,247,0.15)',
+          tension: 0.4,
+          fill: true,
+          pointBackgroundColor: '#4FC3F7',
+          pointRadius: 4,
+          yAxisID: 'y'
+        },
+        {
+          label: '獲得星星',
+          data: chartDataStars,
+          borderColor: '#FFD54F',
+          backgroundColor: 'rgba(255,213,79,0.10)',
+          tension: 0.4,
+          fill: false,
+          pointBackgroundColor: '#FFD54F',
+          pointRadius: 4,
+          borderDash: [4, 3],
+          yAxisID: 'y1'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11, family: 'Baloo 2' }, boxWidth: 12 } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}` } }
+      },
+      scales: {
+        y:  { beginAtZero: true, position: 'left',  ticks: { stepSize: 1, font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.05)' } },
+        y1: { beginAtZero: true, position: 'right', ticks: { stepSize: 5, font: { size: 10 } }, grid: { drawOnChartArea: false } }
+      }
+    }
   });
 }
 
@@ -2507,8 +2691,19 @@ function bindEvents() {
   $('#review-wrong').addEventListener('click', () => startReviewMode('wrong'));
   $('#vocab-search').addEventListener('input', e => {
     const topic = $('.topic-chip.kid-btn-primary')?.dataset.topic || 'all';
-    renderVocabList(e.target.value, topic);
+    renderVocabList(e.target.value, topic, wrongFilterActive);
   });
+
+  // 錯題篩選按鈕
+  const btnWrongFilter = $('#btn-wrong-filter');
+  if (btnWrongFilter) {
+    btnWrongFilter.addEventListener('click', () => {
+      wrongFilterActive = !wrongFilterActive;
+      btnWrongFilter.classList.toggle('active', wrongFilterActive);
+      const topic = $('.topic-chip.kid-btn-primary')?.dataset.topic || 'all';
+      renderVocabList($('#vocab-search').value, topic, wrongFilterActive);
+    });
+  }
 
   $('#test-daily').addEventListener('click', () => startTest('daily'));
   $('#test-stage').addEventListener('click', () => startTest('stage'));
