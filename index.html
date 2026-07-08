@@ -270,6 +270,20 @@
     box-shadow: 0 4px 0 rgba(255,138,101,.3);
   }
 
+  /* ===== PWA 更新提示橫幅 ===== */
+  #pwa-update-banner {
+    position: fixed; top: 6px; left: 50%; transform: translateX(-50%);
+    z-index: 70; background: var(--ink); color: #fff;
+    border-radius: 999px; padding: 8px 18px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; font-weight: 700;
+    box-shadow: 0 8px 24px rgba(0,0,0,.25);
+    animation: slideDown .4s cubic-bezier(.34,1.56,.64,1);
+    white-space: nowrap;
+  }
+  #pwa-update-banner.hidden { display: none; }
+  @keyframes slideDown { from { opacity:0; transform: translateX(-50%) translateY(-20px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+
   /* ===== 同步狀態指示器動畫 ===== */
   @keyframes syncPulse {
     0%, 100% { opacity: 1; }
@@ -303,6 +317,14 @@
 </head>
 
 <body class="font-kid">
+
+  <!-- ========== PWA 更新提示橫幅 ========== -->
+  <div id="pwa-update-banner" class="hidden">
+    <i class="fa-solid fa-rotate text-sky"></i>
+    <span>發現新版本！</span>
+    <button id="pwa-update-btn" style="background:var(--sky);border:none;color:#fff;border-radius:999px;padding:4px 14px;font-weight:800;cursor:pointer;font-size:12px;">立即更新</button>
+    <button id="pwa-update-dismiss" style="background:transparent;border:none;color:#aaa;cursor:pointer;font-size:16px;padding:0 4px;">✕</button>
+  </div>
 
   <!-- ========== 顶部全局进度条 ========== -->
   <div class="top-progress-bar" aria-hidden="true">
@@ -384,6 +406,17 @@
         </div>
         <div class="h-3 bg-soft rounded-full overflow-hidden">
           <div id="overall-progress-fill" class="h-full bg-gradient-to-r from-sky to-grass rounded-full transition-all" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- 每日目标进度条 -->
+      <div class="kid-card p-4 mb-4">
+        <div class="flex justify-between items-center mb-2">
+          <p class="font-bold text-ink text-sm"><i class="fa-solid fa-bullseye text-coral"></i> 每日目标</p>
+          <p class="text-xs text-gray-400 font-bold"><span id="daily-goal-done">0</span>/<span id="daily-goal-target">50</span> 词</p>
+        </div>
+        <div class="h-3 bg-soft rounded-full overflow-hidden">
+          <div id="daily-goal-fill" class="h-full bg-gradient-to-r from-coral to-sun rounded-full transition-all" style="width:0%"></div>
         </div>
       </div>
 
@@ -1300,6 +1333,7 @@ function defaultState() {
     reducedMotion: false,
     ttsLang: 'en-US',
     ttsRate: 0.85,
+    dailyGoal: 50,
     _todayLearnedQueue: [],
   };
 }
@@ -1667,6 +1701,17 @@ function renderHome() {
 
   animateNum($('#wrong-count'), appState.wrongWords.length);
   $('#top-progress-fill').style.width = (doneDays / TOTAL_DAYS * 100) + '%';
+
+  // 每日目標進度條
+  const goal = appState.dailyGoal || 50;
+  const todayLearned = Object.values(appState.wordMastery).filter(m => m.lastReviewed === appState.currentDay && m.level > 0).length;
+  const goalPct = Math.min(100, Math.round(todayLearned / goal * 100));
+  const elGoalDone = $('#daily-goal-done');
+  const elGoalTarget = $('#daily-goal-target');
+  const elGoalFill = $('#daily-goal-fill');
+  if (elGoalDone) elGoalDone.textContent = todayLearned;
+  if (elGoalTarget) elGoalTarget.textContent = goal;
+  if (elGoalFill) elGoalFill.style.width = goalPct + '%';
 }
 
 /* =====================================================================
@@ -2164,6 +2209,7 @@ function renderTestIntro() {
 
 function startTest(type) {
   testType = type;
+  testWrongIds = [];
   const size = type === 'daily' ? TEST_DAILY_Q : type === 'stage' ? TEST_STAGE_Q : TEST_FINAL_Q;
   const weak = Object.entries(appState.wordMastery).filter(([id, m]) => m.level < 4).map(([id]) => parseInt(id));
   const pool = weak.length >= size ? weak : [...weak, ...shuffle(VOCAB.map(w => w.id))];
@@ -2205,6 +2251,7 @@ function renderTestQuestion() {
         testScore += 10; recordAnswer(w.id, true); celebrate();
       } else {
         recordAnswer(w.id, false);
+        if (!testWrongIds.includes(w.id)) testWrongIds.push(w.id);
       }
       testIdx++; renderTestQuestion();
     });
@@ -2221,16 +2268,23 @@ function renderTestQuestion() {
     $$('.test-opt').forEach(btn => btn.addEventListener('click', () => {
       $$('.test-opt').forEach(b => b.disabled = true);
       if (parseInt(btn.dataset.id) === w.id) { btn.classList.add('correct'); testScore += 10; recordAnswer(w.id, true); celebrate(); }
-      else { btn.classList.add('wrong'); recordAnswer(w.id, false); $$('.test-opt').forEach(b => { if (parseInt(b.dataset.id) === w.id) b.classList.add('correct'); }); }
+      else { btn.classList.add('wrong'); recordAnswer(w.id, false); if (!testWrongIds.includes(w.id)) testWrongIds.push(w.id); $$('.test-opt').forEach(b => { if (parseInt(b.dataset.id) === w.id) b.classList.add('correct'); }); }
       setTimeout(() => { testIdx++; renderTestQuestion(); }, 900);
     }));
   }
 }
 
+// 記錄测试错误单字
+let testWrongIds = [];
+
 function finishTest() {
   if (testTimer) clearInterval(testTimer);
+  const elapsed = Math.floor((Date.now() - testStartTs) / 1000);
+  const elapsedStr = `${Math.floor(elapsed/60)}:${String(elapsed%60).padStart(2,'0')}`;
   const total = testQueue.length * 10;
   const pct = Math.round(testScore / total * 100);
+  const correctCount = testScore / 10;
+  const wrongCount = testQueue.length - correctCount;
   const stars = testScore;
   addStars(stars);
   if (pct === 100) { appState.stats.testPerfectCount += 1; celebrate(true); }
@@ -2242,7 +2296,44 @@ function finishTest() {
   }
   checkBadges();
   const grade = pct >= 90 ? '优秀 🌟' : pct >= 70 ? '良好 👍' : pct >= 50 ? '及格 ✅' : '继续加油 💪';
-  showResultModal('测试完成！', `<p>得分：${testScore}/${total}（${pct}%）</p><p class="text-lg font-bold text-sky mt-1">${grade}</p><p>错题已加入错题本，记得复习哦～</p>`, { stars, onOk: renderTestIntro });
+  // 错误单字列表
+  const wrongWords = testWrongIds.map(getWord).filter(Boolean);
+  const wrongHtml = wrongWords.length
+    ? `<div class="mt-3 text-left"><p class="text-xs font-bold text-coral mb-1">本次错误（${wrongWords.length}个）：</p><div class="flex flex-wrap gap-1">${wrongWords.map(w => `<span class="text-xs bg-coral/10 text-coral px-2 py-0.5 rounded-full">${w.word}</span>`).join('')}</div></div>`
+    : '<p class="text-grass font-bold mt-2">全部正确！🎉</p>';
+  const typeLabel = testType === 'daily' ? '每日小测' : testType === 'stage' ? '阶段测试' : '毕业总测';
+  const html = `
+    <div class="grid grid-cols-3 gap-2 my-3">
+      <div class="bg-soft rounded-2xl p-2 text-center">
+        <p class="text-xl font-extrabold text-sky">${pct}%</p>
+        <p class="text-[10px] text-gray-400">正确率</p>
+      </div>
+      <div class="bg-soft rounded-2xl p-2 text-center">
+        <p class="text-xl font-extrabold text-grass">${correctCount}/${testQueue.length}</p>
+        <p class="text-[10px] text-gray-400">题目</p>
+      </div>
+      <div class="bg-soft rounded-2xl p-2 text-center">
+        <p class="text-xl font-extrabold text-coral">${elapsedStr}</p>
+        <p class="text-[10px] text-gray-400">用时</p>
+      </div>
+    </div>
+    <p class="text-lg font-bold text-sky">${grade}</p>
+    ${wrongHtml}
+    ${wrongWords.length ? '<p class="text-xs text-gray-400 mt-2">错题已加入错题本，记得复习哦～</p>' : ''}
+    <div class="grid grid-cols-2 gap-3 mt-4">
+      <button class="test-again kid-btn kid-btn-ghost h-12 text-sm">🔄 再测一次</button>
+      <button class="test-done kid-btn kid-btn-primary h-12 text-sm">好的</button>
+    </div>
+  `;
+  showModal(`
+    <span class="mascot lg" aria-hidden="true">🦊</span>
+    <h3 class="text-2xl font-extrabold text-ink mt-2">${typeLabel}完成！</h3>
+    ${stars ? `<p class="text-amber-500 font-extrabold text-xl mt-1"><i class="fa-solid fa-star"></i> +${stars} 星星</p>` : ''}
+    ${html}
+  `, root => {
+    $('.test-done', root).addEventListener('click', () => { closeModal(); renderTestIntro(); });
+    $('.test-again', root).addEventListener('click', () => { closeModal(); startTest(testType); });
+  });
 }
 
 /* =====================================================================
@@ -2402,11 +2493,39 @@ function renderRewards() {
   const days = Object.keys(appState.dailyRecords).sort((a, b) => b - a).slice(0, 10);
   $('#reward-log').innerHTML = days.map(d => {
     const r = appState.dailyRecords[d];
-    return `<div class="kid-card p-3 flex items-center justify-between">
-      <p class="text-sm font-bold text-ink">第 ${d} 天</p>
-      <p class="text-xs text-gray-400">${r.completed ? '✅ 完成' : '🟡 进行中'} · <span class="star-coin text-xs"><i class="fa-solid fa-star"></i>${r.stars || 0}</span></p>
+    const wordCount = (r.newLearned || []).length;
+    const statusIcon = r.completed ? '✅' : '🟡';
+    const statusText = r.completed ? '完成' : '进行中';
+    return `<div class="kid-card p-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="w-9 h-9 rounded-xl bg-sky/10 flex items-center justify-center text-sm font-extrabold text-sky">${d}</span>
+          <div>
+            <p class="text-sm font-bold text-ink">第 ${d} 天 <span class="text-xs text-gray-400 font-normal">${statusIcon} ${statusText}</span></p>
+            <p class="text-xs text-gray-400">学习 ${wordCount} 个单词 · <span class="text-amber-500 font-bold"><i class="fa-solid fa-star text-xs"></i> ${r.stars || 0}</span></p>
+          </div>
+        </div>
+        <button class="share-day-btn text-gray-300 hover:text-sky text-sm" data-day="${d}" title="分享成就"><i class="fa-solid fa-share-nodes"></i></button>
+      </div>
     </div>`;
   }).join('') || '<p class="text-gray-400 text-center py-6 text-sm">还没有记录，快去学习吧！</p>';
+
+  // 分享按鈕事件
+  $$('.share-day-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const day = btn.dataset.day;
+      const r = appState.dailyRecords[day];
+      const wordCount = (r.newLearned || []).length;
+      const text = `🦊 PET Kids 学习打卡！第 ${day} 天完成，学了 ${wordCount} 个单词，获得 ${r.stars || 0} ⭐。连续打卡 ${appState.streak} 天！🔥 #PET单词 #40天挑战`;
+      if (navigator.share) {
+        navigator.share({ title: 'PET Kids 学习打卡', text });
+      } else {
+        navigator.clipboard.writeText(text).then(() => {
+          showResultModal('已复制成就！', '<p class="text-sm">分享文字已复制到剪贴板，可以直接粘贴分享。</p>', { mascot: '🦊' });
+        });
+      }
+    });
+  });
 }
 
 function checkBadges() {
@@ -2431,15 +2550,23 @@ function renderPlan() {
     const status = rec && rec.completed ? '✅' : (rec && rec.newLearned.length ? '🟡' : '⚪');
     const isToday = p.day === appState.currentDay;
     return `
-      <button class="kid-card w-full p-3 flex items-center gap-3 ${isToday ? 'ring-2 ring-coral' : ''}" onclick="goToDay(${p.day})">
-        <span class="w-10 h-10 rounded-2xl bg-sky/10 flex items-center justify-center font-extrabold text-sky text-sm flex-shrink-0">${p.day}</span>
+      <button class="kid-card w-full p-3 flex items-center gap-3 ${isToday ? 'ring-2 ring-coral' : ''}" id="plan-day-${p.day}" onclick="goToDay(${p.day})">
+        <span class="w-10 h-10 rounded-2xl ${isToday ? 'bg-coral text-white' : 'bg-sky/10 text-sky'} flex items-center justify-center font-extrabold text-sm flex-shrink-0">${p.day}</span>
         <div class="text-left flex-1 min-w-0">
-          <p class="text-sm font-bold text-ink truncate">${p.stage} · ${p.newCount}新词</p>
+          <div class="flex items-center gap-2">
+            <p class="text-sm font-bold text-ink truncate">${p.stage} · ${p.newCount}新词</p>
+            ${isToday ? '<span class="text-[10px] bg-coral text-white px-2 py-0.5 rounded-full font-bold flex-shrink-0">今天</span>' : ''}
+          </div>
           <p class="text-xs text-gray-400 truncate">${p.activity}</p>
         </div>
         <span class="text-lg">${status}</span>
       </button>`;
   }).join('');
+  // 自動滚動到今日
+  setTimeout(() => {
+    const todayEl = document.getElementById(`plan-day-${appState.currentDay}`);
+    if (todayEl) todayEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 150);
 }
 
 function goToDay(day) {
@@ -2561,6 +2688,17 @@ function showSettings() {
         </div>
       </div>
 
+      <!-- 每日目标设定 -->
+      <div class="kid-card p-3">
+        <p class="text-xs font-bold text-gray-400 mb-2"><i class="fa-solid fa-bullseye text-coral"></i> 每日学习目标</p>
+        <div class="flex gap-2">
+          <button class="daily-goal-btn flex-1 kid-btn h-10 text-xs ${(appState.dailyGoal||50) === 30 ? 'kid-btn-primary' : 'kid-btn-ghost'}" data-goal="30">🐢 30词</button>
+          <button class="daily-goal-btn flex-1 kid-btn h-10 text-xs ${(appState.dailyGoal||50) === 50 ? 'kid-btn-primary' : 'kid-btn-ghost'}" data-goal="50">標準 50词</button>
+          <button class="daily-goal-btn flex-1 kid-btn h-10 text-xs ${(appState.dailyGoal||50) === 80 ? 'kid-btn-primary' : 'kid-btn-ghost'}" data-goal="80">🚀 80词</button>
+        </div>
+        <p class="text-[10px] text-gray-400 mt-1">影响首页「每日目标」進度条計算</p>
+      </div>
+
       <!-- 动画开关 -->
       <label class="flex items-center justify-between kid-card p-3">
         <span class="text-sm font-bold text-ink">减少动画</span>
@@ -2574,6 +2712,16 @@ function showSettings() {
     <button class="modal-ok kid-btn kid-btn-primary w-full h-14 mt-5">完成</button>
   `;
   showModal(html, root => {
+    // 每日目標切換
+    $$('.daily-goal-btn', root).forEach(btn => {
+      btn.addEventListener('click', () => {
+        $$('.daily-goal-btn', root).forEach(b => { b.classList.remove('kid-btn-primary'); b.classList.add('kid-btn-ghost'); });
+        btn.classList.add('kid-btn-primary'); btn.classList.remove('kid-btn-ghost');
+        appState.dailyGoal = parseInt(btn.dataset.goal);
+        saveState();
+        renderHome();
+      });
+    });
     // TTS 語音切換
     $$('.tts-lang-btn', root).forEach(btn => {
       btn.addEventListener('click', () => {
@@ -2924,19 +3072,22 @@ function init() {
   tryFetch(0);
 })();
 
-  // ===== PWA Service Worker 注册 =====
+  // ===== PWA Service Worker 注册 + 更新提示 =====
   if ('serviceWorker' in navigator) {
+    var _swReg = null;
     window.addEventListener('load', function() {
       navigator.serviceWorker.register('sw.js', { scope: '/PET-Words/' })
         .then(function(reg) {
+          _swReg = reg;
           console.log('[PWA] Service Worker registered, scope:', reg.scope);
           // 检查更新
           reg.addEventListener('updatefound', function() {
             var newWorker = reg.installing;
             newWorker.addEventListener('statechange', function() {
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // 有新版本可用，提示用户刷新
-                console.log('[PWA] New version available');
+                console.log('[PWA] New version available — showing banner');
+                var banner = document.getElementById('pwa-update-banner');
+                if (banner) banner.classList.remove('hidden');
               }
             });
           });
@@ -2944,6 +3095,27 @@ function init() {
         .catch(function(err) {
           console.warn('[PWA] Service Worker registration failed:', err);
         });
+    });
+    // 更新按鈕：發送 SKIP_WAITING 並重新載入
+    document.addEventListener('DOMContentLoaded', function() {
+      var updateBtn = document.getElementById('pwa-update-btn');
+      var dismissBtn = document.getElementById('pwa-update-dismiss');
+      if (updateBtn) {
+        updateBtn.addEventListener('click', function() {
+          if (_swReg && _swReg.waiting) {
+            _swReg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+          navigator.serviceWorker.addEventListener('controllerchange', function() {
+            location.reload();
+          });
+        });
+      }
+      if (dismissBtn) {
+        dismissBtn.addEventListener('click', function() {
+          var banner = document.getElementById('pwa-update-banner');
+          if (banner) banner.classList.add('hidden');
+        });
+      }
     });
   }
   </script>
