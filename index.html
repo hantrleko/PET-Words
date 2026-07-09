@@ -270,6 +270,33 @@
     box-shadow: 0 4px 0 rgba(255,138,101,.3);
   }
 
+  /* ===== 速記模式翻轉卡片 ===== */
+  .flashcard-wrap {
+    perspective: 1000px;
+    cursor: pointer;
+  }
+  .flashcard-inner {
+    position: relative;
+    width: 100%;
+    min-height: 220px;
+    transition: transform 0.5s cubic-bezier(.4,0,.2,1);
+    transform-style: preserve-3d;
+  }
+  .flashcard-wrap.flipped .flashcard-inner {
+    transform: rotateY(180deg);
+  }
+  .flashcard-front, .flashcard-back {
+    position: absolute; inset: 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    border-radius: 20px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .flashcard-front { background: linear-gradient(135deg, #e3f6fd, #f0fdf4); }
+  .flashcard-back  { background: linear-gradient(135deg, #fff8e1, #fce4ec); transform: rotateY(180deg); }
+
   /* ===== PWA 更新提示橫幅 ===== */
   #pwa-update-banner {
     position: fixed; top: 6px; left: 50%; transform: translateX(-50%);
@@ -525,9 +552,10 @@
                  class="w-full text-center text-2xl font-extrabold border-2 border-sky/30 rounded-2xl py-3 focus:outline-none focus:border-sky" placeholder="输入单词…" />
           <p class="text-xs text-gray-400 mt-2" id="spell-attempt">剩余机会：3</p>
         </div>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-3 gap-2">
           <button id="spell-submit" class="kid-btn kid-btn-primary h-14">提交</button>
           <button id="spell-speak"  class="kid-btn kid-btn-ghost h-14"><i class="fa-solid fa-volume-high"></i>听音</button>
+          <button id="spell-hint"   class="kid-btn kid-btn-sun h-14 text-sm"><i class="fa-solid fa-lightbulb"></i>提示</button>
         </div>
       </div>
 
@@ -572,6 +600,16 @@
           <p class="text-xs text-gray-400"><span id="wrong-count-r">0</span> 个词</p>
         </button>
       </div>
+
+      <!-- 速記模式入口 -->
+      <button id="btn-flashcard" class="kid-card w-full p-4 mb-4 flex items-center gap-3">
+        <span class="w-11 h-11 rounded-2xl bg-grass/15 flex items-center justify-center"><i class="fa-solid fa-bolt text-grass text-lg"></i></span>
+        <div class="text-left flex-1">
+          <p class="font-bold text-ink">单字速記模式</p>
+          <p class="text-xs text-gray-400">翻轉卡片，快速小渫記憶</p>
+        </div>
+        <i class="fa-solid fa-chevron-right text-gray-300"></i>
+      </button>
 
       <!-- 搜索浏览全部词汇 -->
       <div class="kid-card p-4 mb-4">
@@ -1610,6 +1648,76 @@ function celebrate(big = false) {
 }
 
 /* =====================================================================
+ * 7b. 詞根記憶技巧資料庫
+ * ===================================================================== */
+const WORD_TIPS = {
+  // 常見前缀
+  prefixes: [
+    { pat: /^un/, tip: 'un- = 「不」，如 unhappy = 不快樂' },
+    { pat: /^re/, tip: 're- = 「再次/重新」，如 review = 再看' },
+    { pat: /^dis/, tip: 'dis- = 「否定/分離」，如 disappear = 消失' },
+    { pat: /^over/, tip: 'over- = 「超過/太」，如 overeat = 吃太多' },
+    { pat: /^pre/, tip: 'pre- = 「之前」，如 prepare = 事先準備' },
+    { pat: /^inter/, tip: 'inter- = 「互相/之間」，如 internet = 互聯網' },
+    { pat: /^trans/, tip: 'trans- = 「穿越/轉變」，如 transport = 運輸' },
+    { pat: /^sub/, tip: 'sub- = 「在下」，如 subway = 地鐵' },
+    { pat: /^out/, tip: 'out- = 「超過/外」，如 outdoor = 戸外' },
+    { pat: /^mis/, tip: 'mis- = 「錯誤」，如 mistake = 錯誤' },
+  ],
+  // 常見後缀
+  suffixes: [
+    { pat: /tion$/, tip: '-tion = 名詞字尾，如 education = 教育' },
+    { pat: /ness$/, tip: '-ness = 「狀態」，如 happiness = 快樂' },
+    { pat: /ful$/, tip: '-ful = 「充滿」，如 careful = 小心' },
+    { pat: /less$/, tip: '-less = 「沒有」，如 careless = 粗心' },
+    { pat: /ly$/, tip: '-ly = 副詞字尾，如 quickly = 快速地' },
+    { pat: /er$|or$/, tip: '-er/-or = 「做...的人」，如 teacher = 老師' },
+    { pat: /able$|ible$/, tip: '-able = 「能...的」，如 comfortable = 舒適' },
+    { pat: /ment$/, tip: '-ment = 名詞字尾，如 movement = 動作' },
+    { pat: /ous$/, tip: '-ous = 形容詞字尾，如 famous = 著名' },
+    { pat: /ive$/, tip: '-ive = 形容詞字尾，如 active = 積極' },
+  ],
+  // 特定單字記憶法
+  specific: {
+    'beautiful': '💡 beau(法語美) + ti + ful → 充滿美的',
+    'because':   '💡 be + cause(原因) → 因為某原因',
+    'believe':   '💡 be + lie(謊言) + ve → 不謊言地相信',
+    'friend':    '💡 fri + end → 朋友到最後都在',
+    'necessary': '💡 記忆：1個領子(c)和2個袖子(ss)',
+    'address':   '💡 ad(到) + dress(穿著) → 地址',
+    'environment': '💡 environ(周圍) + ment → 周圍的事物',
+    'government': '💡 govern(管理) + ment → 管理機構',
+    'knowledge': '💡 know(知道) + ledge → 知識',
+    'language':  '💡 langue(興語言) + age → 語言',
+    'library':   '💡 libr(書) + ary → 資料庫',
+    'medicine':  '💡 medic(醫學) + ine → 藥物',
+    'mountain':  '💡 mount(山) + ain → 山岳',
+    'people':    '💡 複數形式，不加 -s！',
+    'police':    '💡 poli(城市) + ce → 城市管理者',
+    'receive':   '💡 re(再) + ceive(拿) → 再次拿到',
+    'separate':  '💡 se + par(相等) + ate → 分開',
+    'success':   '💡 suc + cess(走) → 一直走下去就成功',
+    'travel':    '💡 travel 源自 travail(辛勞) → 旅行很辛苦',
+    'weather':   '💡 weath + er → 天氣變化的事物',
+  }
+};
+
+function getWordTip(word) {
+  const w = (word || '').toLowerCase();
+  // 先查特定單字
+  if (WORD_TIPS.specific[w]) return WORD_TIPS.specific[w];
+  // 再查前缀
+  for (const p of WORD_TIPS.prefixes) {
+    if (p.pat.test(w)) return '💡 ' + p.tip;
+  }
+  // 再查後缀
+  for (const s of WORD_TIPS.suffixes) {
+    if (s.pat.test(w)) return '💡 ' + s.tip;
+  }
+  return null;
+}
+
+/* =====================================================================
  * 8. Mascot 鼓励语
  * ===================================================================== */
 const PRAISE = ['太棒了！🎉', '答对啦，你真厉害！⭐', '完美！继续保持！', '哇，你越来越棒了！🌟', '答对了，给你点赞！👍'];
@@ -1794,6 +1902,7 @@ function renderLearnCard() {
         </div>
       </div>
     </div>
+    ${(() => { const tip = getWordTip(w.word); return tip ? `<div class="mt-3 bg-amber-50 border border-amber-200 rounded-2xl p-3 text-left"><p class="text-xs font-bold text-amber-600 mb-0.5"><i class="fa-solid fa-lightbulb"></i> 記憶技巧</p><p class="text-xs text-amber-700">${tip}</p></div>` : ''; })()}
     <p class="text-center text-xs text-gray-300 mt-3 select-none">← 左向鍵下一個 · M 已掌握 · S 朗讀 →</p>
   `;
   // 動畫滑入
@@ -1914,6 +2023,9 @@ function renderSpelling() {
   $('#spell-input').value = '';
   const letters = w.word.split('');
   $('#spell-chips').innerHTML = letters.map(() => `<span class="letter-chip">?</span>`).join('');
+  // 重置提示按鈕
+  const hintBtn = $('#spell-hint');
+  if (hintBtn) { hintBtn.dataset.used = '0'; hintBtn.disabled = false; }
   $('#spell-input').focus();
   updatePracticeProgress();
 }
@@ -1988,6 +2100,22 @@ function renderChoice() {
   updatePracticeProgress();
 }
 
+function buildWordAnalysis(w) {
+  const tip = getWordTip(w.word);
+  const posMap = { n: '名詞', v: '動詞', adj: '形容詞', adv: '副詞', prep: '介詞', conj: '連接詞', pron: '代詞', num: '數詞' };
+  const posLabel = posMap[w.pos] || w.pos;
+  return `
+    <div class="mt-3 text-left space-y-1.5">
+      <div class="flex items-center gap-2">
+        <span class="text-xs bg-sky/10 text-sky px-2 py-0.5 rounded-full font-bold">${posLabel}</span>
+        <span class="text-xs text-gray-400">${w.phonetic}</span>
+      </div>
+      <p class="text-xs text-gray-500 italic">「${w.example_en}」</p>
+      <p class="text-xs text-gray-400">${w.example_cn}</p>
+      ${tip ? `<p class="text-xs text-amber-600 bg-amber-50 rounded-xl px-2 py-1">${tip}</p>` : ''}
+    </div>`;
+}
+
 function onChoiceAnswer(btn, w) {
   const chosenId = parseInt(btn.dataset.id);
   $$('#choice-options .choice-btn').forEach(b => b.disabled = true);
@@ -1997,12 +2125,12 @@ function onChoiceAnswer(btn, w) {
     recordAnswer(w.id, true);
     addStars(10);
     celebrate();
-    setTimeout(() => { practiceIdx++; showResultModal(mascotSay(), `<p>"${w.word}" 选择正确！</p>`, { stars: 10, onOk: renderChoice }); }, 700);
+    setTimeout(() => { practiceIdx++; showResultModal(mascotSay(), `<p class="font-bold text-sky text-lg">${w.word}</p>${buildWordAnalysis(w)}`, { stars: 10, onOk: renderChoice }); }, 700);
   } else {
     btn.classList.add('wrong');
     $$('#choice-options .choice-btn').forEach(b => { if (parseInt(b.dataset.id) === w.id) b.classList.add('correct'); });
     recordAnswer(w.id, false);
-    setTimeout(() => { practiceIdx++; showResultModal('正确答案', `<p class="text-lg font-bold text-sky">${w.word}</p><p>${mascotEncourage()}</p>`, { mascot: '🦊', onOk: renderChoice }); }, 1200);
+    setTimeout(() => { practiceIdx++; showResultModal('正確答案', `<p class="font-bold text-sky text-lg">${w.word}</p>${buildWordAnalysis(w)}`, { mascot: '🦊', onOk: renderChoice }); }, 1200);
   }
   saveState();
 }
@@ -2121,8 +2249,17 @@ function renderVocabList(query, topic = 'all', wrongOnly = false) {
         </div>
         <!-- 展開詳情區塊 -->
         <div class="vocab-detail hidden mt-3 pt-3 border-t border-gray-100">
-          <p class="text-xs text-gray-500 italic">“${w.example_en}”</p>
+          <!-- 掌握度進度條 -->
+          <div class="mb-2">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-[10px] text-gray-400 font-bold">掌握度</span>
+              <span class="text-[10px] font-bold ${lvl >= 4 ? 'text-grass' : lvl >= 2 ? 'text-sky' : 'text-coral'}">${['\u672a學習', '\u521d識', '\u719f悉', '\u826f好', '\u638c握', '\u5b8c美'][lvl]}</span>
+            </div>
+            <div class="flex gap-1">${[0,1,2,3,4].map(i => `<div class="flex-1 h-2 rounded-full ${i < lvl ? (lvl >= 4 ? 'bg-grass' : lvl >= 2 ? 'bg-sky' : 'bg-coral') : 'bg-gray-100'}"></div>`).join('')}</div>
+          </div>
+          <p class="text-xs text-gray-500 italic">"${w.example_en}"</p>
           <p class="text-xs text-gray-400 mt-1">${w.example_cn}</p>
+          ${(() => { const tip = getWordTip(w.word); return tip ? `<p class="text-xs text-amber-600 bg-amber-50 rounded-xl px-2 py-1 mt-2">${tip}</p>` : ''; })()}
           <div class="flex gap-2 mt-3">
             <button class="vocab-wrong-toggle flex-1 kid-btn h-9 text-xs ${isWrong ? 'kid-btn-primary' : 'kid-btn-ghost'}" data-id="${w.id}">
               ${isWrong ? '✖ 移出错题本' : '+ 加入错题本'}
@@ -2176,6 +2313,66 @@ function renderVocabList(query, topic = 'all', wrongOnly = false) {
       if (icon) icon.className = detail.classList.contains('hidden') ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-up';
     }
   }, { once: false });
+}
+
+/* =====================================================================
+ * 13b. 速記模式 Flashcard
+ * ===================================================================== */
+let fcQueue = [];
+let fcIdx = 0;
+
+function showFlashcardMode() {
+  // 取待學字（掉已掌握）或全部詞彙
+  const ids = Object.keys(appState.wordMastery)
+    .filter(id => (appState.wordMastery[id].level || 0) > 0 && (appState.wordMastery[id].level || 0) < 5)
+    .map(Number);
+  fcQueue = shuffle(ids.length >= 5 ? ids : VOCAB.map(w => w.id)).slice(0, 20).map(getWord).filter(Boolean);
+  if (!fcQueue.length) fcQueue = shuffle(VOCAB).slice(0, 20);
+  fcIdx = 0;
+  renderFlashcard();
+}
+
+function renderFlashcard() {
+  if (fcIdx >= fcQueue.length) {
+    showResultModal('速記完成！', `<p>共翻轉了 ${fcQueue.length} 張卡片！</p><p class="text-sm text-gray-400 mt-1">如果記不清可以去「練習」頁巩固。</p>`, { mascot: '🦊', onOk: () => showPage('review') });
+    return;
+  }
+  const w = fcQueue[fcIdx];
+  const tip = getWordTip(w.word);
+  const total = fcQueue.length;
+  const html = `
+    <span class="mascot" aria-hidden="true">📚</span>
+    <p class="text-xs text-gray-400 mt-1 mb-3">卡片 ${fcIdx+1}/${total} · 點擊翻轉</p>
+    <div class="flashcard-wrap w-full" id="fc-card">
+      <div class="flashcard-inner">
+        <div class="flashcard-front text-center">
+          <p class="text-3xl font-extrabold text-ink mb-2">${w.word}</p>
+          <p class="text-sm text-gray-400">${w.phonetic}</p>
+          <p class="text-xs text-sky bg-sky/10 px-3 py-1 rounded-full mt-2">${w.topic}</p>
+          <p class="text-xs text-gray-300 mt-4">點擊看中文</p>
+        </div>
+        <div class="flashcard-back text-center">
+          <p class="text-2xl font-extrabold text-coral mb-1">${w.definition_cn}</p>
+          <p class="text-sm text-gray-500">${w.definition_en}</p>
+          ${tip ? `<p class="text-xs text-amber-600 bg-amber-50 rounded-xl px-2 py-1 mt-2">${tip}</p>` : ''}
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-3 mt-4 w-full">
+      <button id="fc-prev" class="kid-btn kid-btn-ghost h-12" ${fcIdx === 0 ? 'disabled' : ''}><i class="fa-solid fa-arrow-left"></i> 上一張</button>
+      <button id="fc-next" class="kid-btn kid-btn-primary h-12">${fcIdx < total-1 ? '下一張 <i class="fa-solid fa-arrow-right"></i>' : '完成 🎉'}</button>
+    </div>
+    <button id="fc-speak" class="kid-btn kid-btn-ghost w-full h-10 text-sm mt-2"><i class="fa-solid fa-volume-high text-sky"></i> 朗讀單字</button>
+  `;
+  showModal(html, root => {
+    const card = $('#fc-card', root);
+    if (card) card.addEventListener('click', () => card.classList.toggle('flipped'));
+    $('#fc-next', root).addEventListener('click', () => { fcIdx++; closeModal(); renderFlashcard(); });
+    $('#fc-prev', root).addEventListener('click', () => { if (fcIdx > 0) { fcIdx--; closeModal(); renderFlashcard(); } });
+    $('#fc-speak', root).addEventListener('click', () => speak(w.word));
+    // 自動朗讀
+    setTimeout(() => speak(w.word), 300);
+  });
 }
 
 function startReviewMode(mode) {
@@ -2834,9 +3031,28 @@ function bindEvents() {
   $('#spell-submit').addEventListener('click', submitSpelling);
   $('#spell-speak').addEventListener('click', () => { if (practiceQueue[practiceIdx]) speak(practiceQueue[practiceIdx].word); });
   $('#spell-input').addEventListener('keydown', e => { if (e.key === 'Enter') submitSpelling(); });
+  $('#spell-hint').addEventListener('click', () => {
+    const w = practiceQueue[practiceIdx];
+    if (!w) return;
+    const hintCount = (parseInt($('#spell-hint').dataset.used || '0'));
+    const revealCount = hintCount + 1;
+    $('#spell-hint').dataset.used = revealCount;
+    // 顯示前 N 個字母
+    const chips = $$('#spell-chips .letter-chip');
+    const letters = w.word.split('');
+    for (let i = 0; i < Math.min(revealCount, letters.length); i++) {
+      if (chips[i]) { chips[i].className = 'letter-chip hint'; chips[i].textContent = letters[i]; }
+    }
+    // 每次提示扣 3 分
+    practiceScore = Math.max(0, practiceScore - 3);
+    $('#practice-score').textContent = '得分 ' + practiceScore;
+    if (revealCount >= letters.length) $('#spell-hint').disabled = true;
+  });
 
   $('#review-due').addEventListener('click', () => startReviewMode('due'));
   $('#review-wrong').addEventListener('click', () => startReviewMode('wrong'));
+  const fcBtn = $('#btn-flashcard');
+  if (fcBtn) fcBtn.addEventListener('click', showFlashcardMode);
   $('#vocab-search').addEventListener('input', e => {
     const topic = $('.topic-chip.kid-btn-primary')?.dataset.topic || 'all';
     renderVocabList(e.target.value, topic, wrongFilterActive);
