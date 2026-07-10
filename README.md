@@ -74,6 +74,7 @@ PET-Words/
 ### 数据库表结构
 
 ```sql
+-- 新建完整表（包含所有最新欄位）
 CREATE TABLE user_progress (
   id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id         uuid REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
@@ -87,10 +88,22 @@ CREATE TABLE user_progress (
   wrong_words     jsonb DEFAULT '[]',
   stats           jsonb DEFAULT '{"spellingCorrect":0,"testPerfectCount":0}',
   reduced_motion  boolean DEFAULT false,
+  favorites       jsonb DEFAULT '[]',
+  sound_enabled   boolean DEFAULT true,
+  daily_goal      int DEFAULT 50,
+  tts_lang        text DEFAULT 'en-US',
+  tts_rate        float DEFAULT 0.85,
   updated_at      timestamptz DEFAULT now()
 );
 -- RLS: 每个用户只能读写自己的数据
 ALTER TABLE user_progress ENABLE ROW LEVEL SECURITY;
+
+-- 如果已有舊表，执行以下 ALTER TABLE 添加新欄位（已有表用这些）
+-- ALTER TABLE user_progress ADD COLUMN IF NOT EXISTS favorites     jsonb DEFAULT '[]';
+-- ALTER TABLE user_progress ADD COLUMN IF NOT EXISTS sound_enabled boolean DEFAULT true;
+-- ALTER TABLE user_progress ADD COLUMN IF NOT EXISTS daily_goal   int DEFAULT 50;
+-- ALTER TABLE user_progress ADD COLUMN IF NOT EXISTS tts_lang     text DEFAULT 'en-US';
+-- ALTER TABLE user_progress ADD COLUMN IF NOT EXISTS tts_rate     float DEFAULT 0.85;
 ```
 
 ### Auth 配置
@@ -139,7 +152,7 @@ ALTER TABLE user_progress ENABLE ROW LEVEL SECURITY;
 | `dailyGoal` | number | 每日学习目标词数 |
 | `ttsLang` / `ttsRate` | string / number | TTS 语音（美式/英式）与语速设定 |
 
-> 注：`favorites`、`soundEnabled` 等新字段目前仅存于本地 `localStorage`，尚未加入 Supabase `user_progress` 表的云端同步字段，如需跨设备同步收藏/设置，需扩展数据库表结构与 `js/supabase-sync.js` 的推送/合并逻辑。
+> 注：`favorites`、`soundEnabled`、`dailyGoal`、`ttsLang`、`ttsRate` 均已加入雲端同步。如使用舊表，請先執行上方 ALTER TABLE 指令添加新欄位；同步模組已內建防穏性處理，舊表不會導致同步失敗。
 
 ---
 

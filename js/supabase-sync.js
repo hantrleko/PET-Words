@@ -113,6 +113,11 @@ async function pushProgressToCloud() {
       wrong_words:      persist.wrongWords      || [],
       stats:            persist.stats           || { spellingCorrect: 0, testPerfectCount: 0 },
       reduced_motion:   persist.reducedMotion   || false,
+      favorites:        persist.favorites       || [],
+      sound_enabled:    persist.soundEnabled    !== undefined ? persist.soundEnabled : true,
+      daily_goal:       persist.dailyGoal       || 50,
+      tts_lang:         persist.ttsLang         || 'en-US',
+      tts_rate:         persist.ttsRate         || 0.85,
     };
 
     // 加入超時機制，避免無限等待
@@ -124,7 +129,22 @@ async function pushProgressToCloud() {
     );
 
     const { error } = await Promise.race([upsertPromise, timeoutPromise]);
-    if (error) throw error;
+    if (error) {
+      // 如果是欄位不存在錯誤，嘗試用舊格式再推一次
+      if (error.code === '42703' || (error.message && error.message.includes('column'))) {
+        const legacyPayload = {
+          user_id: payload.user_id, current_day: payload.current_day, streak: payload.streak,
+          last_active_date: payload.last_active_date, total_stars: payload.total_stars,
+          badges: payload.badges, word_mastery: payload.word_mastery,
+          daily_records: payload.daily_records, wrong_words: payload.wrong_words,
+          stats: payload.stats, reduced_motion: payload.reduced_motion,
+        };
+        const { error: e2 } = await _supabase.from('user_progress').upsert(legacyPayload, { onConflict: 'user_id' });
+        if (e2) throw e2;
+      } else {
+        throw error;
+      }
+    }
     showSyncStatus('✓ 已同步', 'grass');
 
   } catch (err) {
@@ -167,6 +187,11 @@ async function pullAndMergeProgress() {
       wrongWords:      data.wrong_words || [],
       stats:           data.stats || { spellingCorrect: 0, testPerfectCount: 0 },
       reducedMotion:   data.reduced_motion || false,
+      favorites:       data.favorites || [],
+      soundEnabled:    data.sound_enabled !== undefined ? data.sound_enabled : true,
+      dailyGoal:       data.daily_goal || 50,
+      ttsLang:         data.tts_lang || 'en-US',
+      ttsRate:         data.tts_rate || 0.85,
     };
 
     const localStars  = (typeof appState !== 'undefined') ? (appState.totalStars || 0) : 0;

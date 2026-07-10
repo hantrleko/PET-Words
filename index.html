@@ -442,6 +442,13 @@
         <div class="flex justify-center mb-2">
           <span id="hero-rank-badge" class="rank-badge">🐣 萌新探索者</span>
         </div>
+        <!-- 稱號進度條 -->
+        <div class="flex items-center gap-2 mb-3 px-2">
+          <div class="flex-1 h-1.5 bg-white/30 rounded-full overflow-hidden">
+            <div id="rank-progress-fill" class="h-full bg-white rounded-full transition-all duration-700" style="width:0%"></div>
+          </div>
+          <span id="rank-next-label" class="text-[10px] text-white/70 font-bold flex-shrink-0"></span>
+        </div>
         <p class="text-sm font-semibold opacity-90">今天是第 <span id="hero-day" class="text-2xl font-extrabold">1</span> 天</p>
         <h2 class="text-2xl font-extrabold my-1">今日任务 <span id="hero-progress">0%</span></h2>
         <div class="h-3 bg-white/30 rounded-full mt-3 mb-5 overflow-hidden">
@@ -640,9 +647,10 @@
                  class="w-full text-center text-2xl font-extrabold border-2 border-sky/30 rounded-2xl py-3 focus:outline-none focus:border-sky" placeholder="输入听到的单词…" />
           <p class="text-xs text-gray-400 mt-2" id="listen-attempt">剩余机会：3</p>
         </div>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-3 gap-2">
           <button id="listen-submit" class="kid-btn kid-btn-primary h-14">提交</button>
-          <button id="listen-hint"   class="kid-btn kid-btn-sun h-14 text-sm"><i class="fa-solid fa-lightbulb"></i>提示释义</button>
+          <button id="listen-replay" class="kid-btn kid-btn-sky h-14 text-sm"><i class="fa-solid fa-rotate-right"></i>再听</button>
+          <button id="listen-hint"   class="kid-btn kid-btn-sun h-14 text-sm"><i class="fa-solid fa-lightbulb"></i>释义</button>
         </div>
       </div>
     </section>
@@ -1957,11 +1965,17 @@ function renderHome() {
   const day = appState.currentDay;
   $('#hero-day').textContent = day;
 
-  // 稱號徽章
+  // 稱號徽章 + 進度條
   const heroRankEl = $('#hero-rank-badge');
+  const rankFill = $('#rank-progress-fill');
+  const rankNextLabel = $('#rank-next-label');
   if (heroRankEl) {
     const rk = rankOf(appState.totalStars);
     heroRankEl.textContent = `${rk.icon} ${rk.title}`;
+    if (rankFill) rankFill.style.width = rk.pct + '%';
+    if (rankNextLabel) {
+      rankNextLabel.textContent = rk.next ? `到 ${rk.next.icon} ${rk.pct}%` : '最高級已解鎖 🎉';
+    }
   }
 
   const rec = appState.dailyRecords[day] || { newLearned: [], practiceCorrect: 0, stars: 0, completed: false };
@@ -2145,11 +2159,14 @@ let practiceQueue = [];
 let practiceIdx = 0;
 let practiceScore = 0;
 let spellAttempts = 3;
+// 本輪練習統計
+let sessionStats = { total: 0, correct: 0, spellTotal: 0, spellCorrect: 0, listenTotal: 0, listenCorrect: 0, wrongIds: [] };
 
 function renderPracticeInit() {
   practiceQueue = buildPracticeQueue();
   practiceIdx = 0;
   practiceScore = 0;
+  sessionStats = { total: 0, correct: 0, spellTotal: 0, spellCorrect: 0, listenTotal: 0, listenCorrect: 0, wrongIds: [] };
   switchPracticeTab(practiceTab);
 }
 
@@ -2213,6 +2230,7 @@ function submitListen() {
   if (input === target) {
     practiceScore += 10;
     appState.stats.listenCorrect = (appState.stats.listenCorrect || 0) + 1;
+    sessionStats.total++; sessionStats.correct++; sessionStats.listenTotal++; sessionStats.listenCorrect++;
     recordAnswer(w.id, true);
     addStars(10);
     celebrate();
@@ -2221,6 +2239,8 @@ function submitListen() {
     checkBadges();
   } else {
     listenAttempts--;
+    sessionStats.total++; sessionStats.listenTotal++;
+    if (!sessionStats.wrongIds.includes(w.id)) sessionStats.wrongIds.push(w.id);
     recordAnswer(w.id, false);
     $('#listen-attempt').textContent = '剩余机会：' + Math.max(0, listenAttempts);
     if (listenAttempts <= 0) {
@@ -2284,6 +2304,7 @@ function submitSpelling() {
   if (input === target) {
     practiceScore += 10;
     appState.stats.spellingCorrect += 1;
+    sessionStats.total++; sessionStats.correct++; sessionStats.spellTotal++; sessionStats.spellCorrect++;
     recordAnswer(w.id, true);
     addStars(10);
     celebrate();
@@ -2292,6 +2313,8 @@ function submitSpelling() {
     checkBadges();
   } else {
     spellAttempts--;
+    sessionStats.total++; sessionStats.spellTotal++;
+    if (!sessionStats.wrongIds.includes(w.id)) sessionStats.wrongIds.push(w.id);
     recordAnswer(w.id, false);
     $('#spell-attempt').textContent = '剩余机会：' + Math.max(0, spellAttempts);
     if (spellAttempts <= 0) {
@@ -2419,7 +2442,31 @@ function finishPractice() {
   }
   saveState();
   checkBadges();
-  showResultModal('练习完成！', `<p>本轮得分：${practiceScore} 分</p>${perfect ? '<p class="text-grass font-bold">完美一轮！+50 星星</p>' : ''}<p>去复习专区或测试一下吧～</p>`, { stars: Math.round(stars / 10) + bonus, onOk: () => showPage('review') });
+  // 計算本輪統計
+  const totalAcc = sessionStats.total > 0 ? Math.round(sessionStats.correct / sessionStats.total * 100) : 0;
+  const spellAcc = sessionStats.spellTotal > 0 ? Math.round(sessionStats.spellCorrect / sessionStats.spellTotal * 100) : null;
+  const listenAcc = sessionStats.listenTotal > 0 ? Math.round(sessionStats.listenCorrect / sessionStats.listenTotal * 100) : null;
+  const topWrong = sessionStats.wrongIds.slice(0, 3).map(getWord).filter(Boolean);
+
+  const statsHtml = `
+    <div class="grid grid-cols-3 gap-2 my-3">
+      <div class="bg-soft rounded-2xl p-2 text-center">
+        <p class="text-xl font-extrabold text-sky">${totalAcc}%</p>
+        <p class="text-[10px] text-gray-400">總正確率</p>
+      </div>
+      <div class="bg-soft rounded-2xl p-2 text-center">
+        <p class="text-xl font-extrabold text-grass">${spellAcc !== null ? spellAcc + '%' : '--'}</p>
+        <p class="text-[10px] text-gray-400">拼写正確率</p>
+      </div>
+      <div class="bg-soft rounded-2xl p-2 text-center">
+        <p class="text-xl font-extrabold text-coral">${listenAcc !== null ? listenAcc + '%' : '--'}</p>
+        <p class="text-[10px] text-gray-400">聽力正確率</p>
+      </div>
+    </div>
+    ${topWrong.length ? `<div class="text-left"><p class="text-xs font-bold text-coral mb-1">本輪需加強（${topWrong.length}個）：</p><div class="flex flex-wrap gap-1">${topWrong.map(w => `<span class="text-xs bg-coral/10 text-coral px-2 py-0.5 rounded-full">${w.word}</span>`).join('')}</div></div>` : '<p class="text-grass font-bold text-sm">本輪全部正確！🎉</p>'}
+    ${perfect ? '<p class="text-grass font-bold mt-2">完美一轮！+50 星星</p>' : ''}
+  `;
+  showResultModal('练习完成！', statsHtml, { stars: Math.round(stars / 10) + bonus, onOk: () => showPage('review') });
 }
 
 /* =====================================================================
@@ -2587,14 +2634,49 @@ let fcQueue = [];
 let fcIdx = 0;
 
 function showFlashcardMode() {
-  // 取待學字（掉已掌握）或全部詞彙
-  const ids = Object.keys(appState.wordMastery)
+  const favIds = appState.favorites || [];
+  const pendingIds = Object.keys(appState.wordMastery)
     .filter(id => (appState.wordMastery[id].level || 0) > 0 && (appState.wordMastery[id].level || 0) < 5)
     .map(Number);
-  fcQueue = shuffle(ids.length >= 5 ? ids : VOCAB.map(w => w.id)).slice(0, 20).map(getWord).filter(Boolean);
-  if (!fcQueue.length) fcQueue = shuffle(VOCAB).slice(0, 20);
-  fcIdx = 0;
-  renderFlashcard();
+
+  // 如果有收藏單字，先詢問用戶要哪種模式
+  if (favIds.length > 0) {
+    const html = `
+      <span class="mascot lg">📚</span>
+      <h3 class="text-xl font-extrabold text-ink mt-2">選擇速記範圍</h3>
+      <p class="text-sm text-gray-400 mt-2 mb-5">您有 ${favIds.length} 個收藏單字</p>
+      <div class="space-y-3 w-full">
+        <button id="fc-mode-fav" class="kid-btn kid-btn-sun w-full h-14">⭐ 只看收藏 (${favIds.length}個)</button>
+        <button id="fc-mode-pending" class="kid-btn kid-btn-primary w-full h-14">📚 待掌握單字 (${pendingIds.length || '?'}個)</button>
+        <button id="fc-mode-all" class="kid-btn kid-btn-ghost w-full h-14">🌍 全部詞彙 (20個)</button>
+      </div>
+    `;
+    showModal(html, root => {
+      $('#fc-mode-fav', root).addEventListener('click', () => {
+        closeModal();
+        fcQueue = shuffle(favIds).slice(0, 20).map(getWord).filter(Boolean);
+        if (!fcQueue.length) fcQueue = shuffle(VOCAB).slice(0, 20);
+        fcIdx = 0; renderFlashcard();
+      });
+      $('#fc-mode-pending', root).addEventListener('click', () => {
+        closeModal();
+        fcQueue = shuffle(pendingIds.length >= 5 ? pendingIds : VOCAB.map(w => w.id)).slice(0, 20).map(getWord).filter(Boolean);
+        if (!fcQueue.length) fcQueue = shuffle(VOCAB).slice(0, 20);
+        fcIdx = 0; renderFlashcard();
+      });
+      $('#fc-mode-all', root).addEventListener('click', () => {
+        closeModal();
+        fcQueue = shuffle(VOCAB).slice(0, 20);
+        fcIdx = 0; renderFlashcard();
+      });
+    });
+  } else {
+    // 沒有收藏，直接用待掌握或全部
+    fcQueue = shuffle(pendingIds.length >= 5 ? pendingIds : VOCAB.map(w => w.id)).slice(0, 20).map(getWord).filter(Boolean);
+    if (!fcQueue.length) fcQueue = shuffle(VOCAB).slice(0, 20);
+    fcIdx = 0;
+    renderFlashcard();
+  }
 }
 
 function renderFlashcard() {
@@ -3403,6 +3485,14 @@ function bindEvents() {
   if (listenSubmitBtn) listenSubmitBtn.addEventListener('click', submitListen);
   const listenInputEl = $('#listen-input');
   if (listenInputEl) listenInputEl.addEventListener('keydown', e => { if (e.key === 'Enter') submitListen(); });
+  const listenReplayBtn = $('#listen-replay');
+  if (listenReplayBtn) listenReplayBtn.addEventListener('click', () => {
+    const w = practiceQueue[practiceIdx];
+    if (!w) return;
+    speak(w.word);
+    listenReplayBtn.classList.add('speaking');
+    setTimeout(() => listenReplayBtn.classList.remove('speaking'), 700);
+  });
   const listenHintBtn = $('#listen-hint');
   if (listenHintBtn) listenHintBtn.addEventListener('click', () => {
     const w = practiceQueue[practiceIdx];
