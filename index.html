@@ -318,6 +318,54 @@
   }
   #sync-status-text:not(:empty) { animation: syncPulse 1.5s ease-in-out infinite; }
   #sync-status-text.synced { animation: none; }
+
+  /* ===== Toast 輕提示（取代部分彈窗，減少打斷） ===== */
+  #toast-root {
+    position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+    z-index: 95; display: flex; flex-direction: column; gap: 8px;
+    align-items: center; pointer-events: none; width: 100%; max-width: 380px; padding: 0 16px;
+  }
+  .toast {
+    background: rgba(31,41,55,.92); color: #fff; font-weight: 700; font-size: 14px;
+    border-radius: 16px; padding: 10px 18px; box-shadow: 0 8px 24px rgba(0,0,0,.2);
+    display: flex; align-items: center; gap: 8px; white-space: nowrap;
+    animation: toastIn .3s cubic-bezier(.34,1.56,.64,1), toastOut .3s ease forwards 1.7s;
+  }
+  .toast.correct { background: rgba(129,199,132,.95); }
+  .toast.wrong   { background: rgba(255,138,101,.95); }
+  @keyframes toastIn  { from { opacity:0; transform: translateY(16px) scale(.9); } to { opacity:1; transform: translateY(0) scale(1); } }
+  @keyframes toastOut { from { opacity:1; } to { opacity:0; transform: translateY(-8px); } }
+
+  /* ===== 收藏星標 ===== */
+  .fav-star-btn { color: #d8dee6; transition: transform .2s, color .2s; }
+  .fav-star-btn.active { color: var(--sun); }
+  .fav-star-btn:active { transform: scale(1.3); }
+  @keyframes favPop { 0%{transform:scale(1)} 50%{transform:scale(1.4)} 100%{transform:scale(1)} }
+  .fav-star-btn.just-fav { animation: favPop .35s; }
+
+  /* ===== 稱號徽章（首頁/獎勵頁） ===== */
+  .rank-badge {
+    display:inline-flex; align-items:center; gap:6px;
+    background: rgba(255,255,255,.22); border-radius: 999px;
+    padding: 4px 12px; font-size: 12px; font-weight: 800;
+  }
+
+  /* ===== 聽力拼寫練習 ===== */
+  #practice-listen .listen-play-btn {
+    width: 84px; height: 84px; border-radius: 50%;
+    background: var(--sky); color: #fff; font-size: 30px;
+    display: flex; align-items:center; justify-content:center;
+    margin: 0 auto; box-shadow: 0 8px 0 rgba(0,0,0,.08);
+    transition: transform .15s;
+  }
+  #practice-listen .listen-play-btn:active { transform: scale(.92); }
+  #practice-listen .listen-play-btn.speaking { animation: speakPulse .8s ease-in-out infinite; }
+
+  /* ===== 錯題/收藏篩選按鈕啟用 ===== */
+  #btn-fav-filter.active {
+    background: var(--sun); color: var(--ink);
+    box-shadow: 0 4px 0 rgba(255,213,79,.35);
+  }
   </style>
 
   <script>
@@ -391,6 +439,9 @@
 
       <!-- Hero：今日概览 -->
       <div class="kid-card p-6 mb-4 text-center bg-gradient-to-br from-sky to-grass text-white">
+        <div class="flex justify-center mb-2">
+          <span id="hero-rank-badge" class="rank-badge">🐣 萌新探索者</span>
+        </div>
         <p class="text-sm font-semibold opacity-90">今天是第 <span id="hero-day" class="text-2xl font-extrabold">1</span> 天</p>
         <h2 class="text-2xl font-extrabold my-1">今日任务 <span id="hero-progress">0%</span></h2>
         <div class="h-3 bg-white/30 rounded-full mt-3 mb-5 overflow-hidden">
@@ -529,11 +580,12 @@
         <div class="w-10"></div>
       </header>
 
-      <!-- 三个大 Tab -->
-      <div class="grid grid-cols-3 gap-2 mb-4 kid-card p-2">
+      <!-- 四个大 Tab -->
+      <div class="grid grid-cols-4 gap-2 mb-4 kid-card p-2">
         <button class="practice-tab kid-btn h-12 text-sm active" data-tab="spelling"><i class="fa-solid fa-keyboard"></i><span class="block text-[11px]">拼写</span></button>
         <button class="practice-tab kid-btn h-12 text-sm" data-tab="choice"><i class="fa-solid fa-list-check"></i><span class="block text-[11px]">选择</span></button>
         <button class="practice-tab kid-btn h-12 text-sm" data-tab="sentence"><i class="fa-solid fa-pen-nib"></i><span class="block text-[11px]">例句</span></button>
+        <button class="practice-tab kid-btn h-12 text-sm" data-tab="listen"><i class="fa-solid fa-headphones"></i><span class="block text-[11px]">听力</span></button>
       </div>
 
       <!-- 进度 -->
@@ -575,6 +627,23 @@
           <p class="text-lg font-bold text-ink leading-relaxed" id="sentence-text">…</p>
         </div>
         <div id="sentence-options" class="grid grid-cols-1 gap-3"></div>
+      </div>
+
+      <!-- 听力拼写区 -->
+      <div id="practice-listen" class="practice-panel hidden-page">
+        <div class="kid-card p-6 mb-4 text-center">
+          <p class="text-xs text-gray-400 font-semibold mb-3">听发音，拼出正确的单词</p>
+          <button id="listen-play-btn" class="listen-play-btn" aria-label="播放发音"><i class="fa-solid fa-volume-high"></i></button>
+          <p class="text-xs text-gray-300 mt-3">可反复点击聆听</p>
+          <div id="listen-chips" class="flex flex-wrap justify-center gap-1 my-4 min-h-[56px]"></div>
+          <input id="listen-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+                 class="w-full text-center text-2xl font-extrabold border-2 border-sky/30 rounded-2xl py-3 focus:outline-none focus:border-sky" placeholder="输入听到的单词…" />
+          <p class="text-xs text-gray-400 mt-2" id="listen-attempt">剩余机会：3</p>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="listen-submit" class="kid-btn kid-btn-primary h-14">提交</button>
+          <button id="listen-hint"   class="kid-btn kid-btn-sun h-14 text-sm"><i class="fa-solid fa-lightbulb"></i>提示释义</button>
+        </div>
       </div>
     </section>
 
@@ -619,9 +688,12 @@
                  class="w-full pl-11 pr-4 py-3 rounded-2xl border-2 border-sky/20 focus:outline-none focus:border-sky font-semibold" />
         </div>
         <!-- 筛選列 -->
-        <div class="flex items-center gap-2 mb-3">
+        <div class="flex items-center gap-2 mb-3 flex-wrap">
           <button id="btn-wrong-filter" class="kid-btn kid-btn-ghost h-9 text-xs px-3 flex items-center gap-1">
             <i class="fa-solid fa-circle-xmark text-coral"></i> 只看錯題 (<span id="wrong-filter-count">0</span>)
+          </button>
+          <button id="btn-fav-filter" class="kid-btn kid-btn-ghost h-9 text-xs px-3 flex items-center gap-1">
+            <i class="fa-solid fa-star text-sun"></i> 只看收藏 (<span id="fav-filter-count">0</span>)
           </button>
           <span class="text-xs text-gray-300">|主題筛選：</span>
         </div>
@@ -740,6 +812,7 @@
 
       <button id="btn-cloud-sync" class="kid-btn kid-btn-primary w-full h-14 mb-3"><i class="fa-solid fa-cloud-arrow-up"></i> <span id="btn-cloud-sync-text">登入并开启雲端同步</span></button>
       <button id="btn-export" class="kid-btn kid-btn-ghost w-full h-14 mb-3"><i class="fa-solid fa-download"></i> 导出进度备份</button>
+      <button id="btn-restore" class="kid-btn kid-btn-ghost w-full h-14 mb-3"><i class="fa-solid fa-rotate-left"></i> 恢复进度备份</button>
       <button id="btn-import-vocab" class="kid-btn kid-btn-sun w-full h-14 mb-3"><i class="fa-solid fa-file-import"></i> 导入词库</button>
       <button id="btn-reset" class="kid-btn kid-btn-ghost w-full h-14 text-coral mb-3"><i class="fa-solid fa-trash-can"></i> 重置所有进度</button>
     </section>
@@ -759,6 +832,17 @@
         <p class="text-sm font-semibold opacity-90">累计星星</p>
         <p class="text-5xl font-extrabold my-2"><i class="fa-solid fa-star"></i> <span id="reward-stars">0</span></p>
         <p class="text-xs opacity-90">继续努力，解锁更多奖励！</p>
+      </div>
+
+      <!-- 稱號進度 -->
+      <div class="kid-card p-4 mb-4">
+        <div class="flex items-center justify-between mb-2">
+          <span id="rank-current-badge" class="rank-badge" style="background: rgba(79,195,247,.15); color: var(--ink);">🐣 萌新探索者</span>
+          <span id="rank-next-text" class="text-xs text-gray-400 font-semibold"></span>
+        </div>
+        <div class="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+          <div id="rank-progress-fill" class="h-full bg-sky rounded-full transition-all duration-500" style="width:0%"></div>
+        </div>
       </div>
 
       <!-- 徽章墙 -->
@@ -811,6 +895,9 @@
 
   <!-- ========== Modal 容器（教程/结果/证书） ========== -->
   <div id="modal-root"></div>
+
+  <!-- ========== Toast 輕提示容器 ========== -->
+  <div id="toast-root" aria-live="polite"></div>
 
   <!-- ========== 词库数据（内联，消除外部 vocab-data.js 路径依赖） ========== -->
   <script>
@@ -1355,7 +1442,29 @@ const BADGES = [
   { id: 'master_all',   icon: '🎓', name: '词汇大师',  desc: '掌握全部单词',      check: s => masteredCount() >= totalVocab() },
   { id: 'test_perfect', icon: '💯', name: '满分选手',  desc: '任一测试得满分',    check: s => s.stats.testPerfectCount >= 1 },
   { id: 'wrong_clear',  icon: '🧹', name: '错题清零',  desc: '错题本清空',        check: s => s.wrongWords.length === 0 && s.stats.spellingCorrect > 0 },
+  { id: 'collector_20', icon: '💎', name: '收藏达人',  desc: '收藏20个单词',      check: s => (s.favorites || []).length >= 20 },
+  { id: 'listen_100',   icon: '🎧', name: '耳聪目明',  desc: '听力练习正确100次', check: s => (s.stats.listenCorrect || 0) >= 100 },
+  { id: 'rank_scholar', icon: '👑', name: '词汇学者',  desc: '晋升为「词汇学者」称号', check: s => rankOf(s.totalStars).idx >= 4 },
 ];
+
+/* ── 稱號/等級系統：依累計星星劃分等級，讓成長感更明顯 ── */
+const RANKS = [
+  { min: 0,    title: '萌新探索者', icon: '🐣' },
+  { min: 200,  title: '词汇新苗',   icon: '🌱' },
+  { min: 600,  title: '勤奋学徒',   icon: '📗' },
+  { min: 1500, title: '词汇能手',   icon: '⚡' },
+  { min: 3000, title: '词汇学者',   icon: '👑' },
+  { min: 6000, title: '词汇大师',   icon: '🏅' },
+  { min: 10000,title: 'PET 传奇',   icon: '🐉' },
+];
+function rankOf(stars) {
+  let idx = 0;
+  for (let i = 0; i < RANKS.length; i++) { if (stars >= RANKS[i].min) idx = i; }
+  const cur = RANKS[idx];
+  const next = RANKS[idx + 1] || null;
+  const pct = next ? Math.round((stars - cur.min) / (next.min - cur.min) * 100) : 100;
+  return { idx, title: cur.title, icon: cur.icon, next, pct: Math.max(0, Math.min(100, pct)) };
+}
 
 function defaultState() {
   return {
@@ -1367,11 +1476,13 @@ function defaultState() {
     wordMastery: {},
     dailyRecords: {},
     wrongWords: [],
-    stats: { spellingCorrect: 0, testPerfectCount: 0 },
+    stats: { spellingCorrect: 0, testPerfectCount: 0, listenCorrect: 0 },
     reducedMotion: false,
     ttsLang: 'en-US',
     ttsRate: 0.85,
     dailyGoal: 50,
+    favorites: [],           // 收藏的單字 id
+    soundEnabled: true,      // 音效開關
     _todayLearnedQueue: [],
   };
 }
@@ -1503,11 +1614,13 @@ function recordAnswer(id, correct) {
     m.level = Math.min(5, m.level + 1);
     m.correctStreak += 1;
     appState.wrongWords = appState.wrongWords.filter(w => w !== id);
+    sfxCorrect();
   } else {
     m.level = Math.max(0, m.level - 1);
     m.correctStreak = 0;
     m.wrongCount += 1;
     if (!appState.wrongWords.includes(id)) appState.wrongWords.push(id);
+    sfxWrong();
   }
   m.lastReviewed = appState.currentDay;
   appState.wordMastery[id] = m;
@@ -1515,7 +1628,13 @@ function recordAnswer(id, correct) {
 }
 
 function addStars(n) {
+  const prevRank = rankOf(appState.totalStars);
   appState.totalStars += n;
+  if (n > 0) sfxStar();
+  const newRank = rankOf(appState.totalStars);
+  if (newRank.idx > prevRank.idx) {
+    setTimeout(() => showResultModal('恭喜升级！', `<div class="text-5xl my-2">${newRank.icon}</div><p class="text-lg font-extrabold text-ink">晋升为「${newRank.title}」</p><p class="text-sm text-gray-400 mt-1">继续加油，向下一称号迈进！</p>`, { mascot: '🎉' }), 500);
+  }
   saveState();
 }
 
@@ -1629,6 +1748,43 @@ function speakSentence(text) {
 }
 
 /* =====================================================================
+ * 6b. WebAudio 音效系統（答對/答錯/星星/徽章），輕量無需外部音頻檔
+ * ===================================================================== */
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx) {
+    try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
+  }
+  if (_audioCtx.state === 'suspended') _audioCtx.resume();
+  return _audioCtx;
+}
+function playTone(freqs, opts = {}) {
+  if (appState.soundEnabled === false) return;
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const dur = opts.dur || 0.12;
+  const gap = opts.gap || 0.09;
+  freqs.forEach((f, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = opts.type || 'sine';
+    osc.frequency.value = f;
+    const t0 = now + i * gap;
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.linearRampToValueAtTime(opts.vol || 0.18, t0 + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  });
+}
+function sfxCorrect()  { playTone([523.25, 659.25, 783.99], { dur: 0.14, gap: 0.09 }); }
+function sfxWrong()    { playTone([220, 180], { type: 'triangle', dur: 0.16, gap: 0.1, vol: 0.15 }); }
+function sfxStar()     { playTone([880, 1174.66], { dur: 0.1, gap: 0.07, vol: 0.14 }); }
+function sfxBadge()    { playTone([523.25, 659.25, 783.99, 1046.5], { dur: 0.16, gap: 0.11 }); }
+function sfxClick()    { playTone([440], { dur: 0.05, gap: 0, vol: 0.08 }); }
+
+/* =====================================================================
  * 7. Confetti 撒花
  * ===================================================================== */
 function celebrate(big = false) {
@@ -1737,6 +1893,17 @@ function showModal(html, onMount) {
 }
 function closeModal() { $('#modal-root').innerHTML = ''; }
 
+/* ── Toast 輕提示：用於練習中「答對」時的快速反饋，避免每題都彈窗打斷節奏 ── */
+function showToast(msg, type = '') {
+  const root = $('#toast-root');
+  if (!root) return;
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.innerHTML = msg;
+  root.appendChild(el);
+  setTimeout(() => el.remove(), 2000);
+}
+
 function showResultModal(title, bodyHtml, opts = {}) {
   const starLine = opts.stars ? `<p class="text-amber-500 font-extrabold text-xl mt-2"><i class="fa-solid fa-star"></i> +${opts.stars} 星星</p>` : '';
   const html = `
@@ -1789,6 +1956,13 @@ function animateNum(el, newVal) {
 function renderHome() {
   const day = appState.currentDay;
   $('#hero-day').textContent = day;
+
+  // 稱號徽章
+  const heroRankEl = $('#hero-rank-badge');
+  if (heroRankEl) {
+    const rk = rankOf(appState.totalStars);
+    heroRankEl.textContent = `${rk.icon} ${rk.title}`;
+  }
 
   const rec = appState.dailyRecords[day] || { newLearned: [], practiceCorrect: 0, stars: 0, completed: false };
   const newTotal = dayNewWords(day).length;
@@ -2006,6 +2180,60 @@ function switchPracticeTab(tab) {
   if (tab === 'spelling') renderSpelling();
   if (tab === 'choice')   renderChoice();
   if (tab === 'sentence') renderSentence();
+  if (tab === 'listen')   renderListen();
+}
+
+/* ---- 聽力拼寫 Listening Dictation ---- */
+let listenAttempts = 3;
+function renderListen() {
+  if (practiceIdx >= practiceQueue.length) { finishPractice(); return; }
+  const w = practiceQueue[practiceIdx];
+  listenAttempts = 3;
+  $('#listen-attempt').textContent = '剩余机会：3';
+  $('#listen-input').value = '';
+  const letters = w.word.split('');
+  $('#listen-chips').innerHTML = letters.map(() => `<span class="letter-chip">?</span>`).join('');
+  updatePracticeProgress();
+  setTimeout(() => speak(w.word), 250);
+}
+function submitListen() {
+  const w = practiceQueue[practiceIdx];
+  const input = norm($('#listen-input').value);
+  const target = norm(w.word);
+  const chips = $$('#listen-chips .letter-chip');
+  const targetLetters = w.word.split('');
+  const inputLetters = $('#listen-input').value.split('');
+  targetLetters.forEach((ch, i) => {
+    const chip = chips[i];
+    if (!chip) return;
+    const inCh = inputLetters[i];
+    if (inCh && norm(inCh) === norm(ch)) { chip.className = 'letter-chip correct'; chip.textContent = ch; }
+    else { chip.className = 'letter-chip wrong'; chip.textContent = ch; }
+  });
+  if (input === target) {
+    practiceScore += 10;
+    appState.stats.listenCorrect = (appState.stats.listenCorrect || 0) + 1;
+    recordAnswer(w.id, true);
+    addStars(10);
+    celebrate();
+    showToast(`✅ 听力正确！ <span class="opacity-80">+10⭐</span>`, 'correct');
+    setTimeout(() => { practiceIdx++; renderListen(); }, 550);
+    checkBadges();
+  } else {
+    listenAttempts--;
+    recordAnswer(w.id, false);
+    $('#listen-attempt').textContent = '剩余机会：' + Math.max(0, listenAttempts);
+    if (listenAttempts <= 0) {
+      chips.forEach((chip, i) => { chip.className = 'letter-chip hint'; chip.textContent = targetLetters[i] || ''; });
+      showResultModal('正确答案', `<p class="text-lg font-bold text-sky">${w.word}</p><p>${mascotEncourage()}</p>`, { mascot: '🦊', onOk: () => { practiceIdx++; renderListen(); } });
+    } else {
+      showToast('❌ 再听一次试试看～', 'wrong');
+      $('#listen-input').value = '';
+      const letters = w.word.split('');
+      $('#listen-chips').innerHTML = letters.map(() => `<span class="letter-chip">?</span>`).join('');
+    }
+  }
+  saveState();
 }
 
 function updatePracticeProgress() {
@@ -2059,7 +2287,9 @@ function submitSpelling() {
     recordAnswer(w.id, true);
     addStars(10);
     celebrate();
-    showResultModal(mascotSay(), `<p>"${w.word}" 拼写正确！</p>`, { stars: 10, onOk: nextSpelling });
+    showToast(`✅ ${mascotSay()} <span class="opacity-80">+10⭐</span>`, 'correct');
+    setTimeout(nextSpelling, 550);
+    checkBadges();
   } else {
     spellAttempts--;
     recordAnswer(w.id, false);
@@ -2161,7 +2391,9 @@ function onSentenceAnswer(btn, w) {
     recordAnswer(w.id, true);
     addStars(10);
     celebrate();
-    setTimeout(() => { practiceIdx++; showResultModal(mascotSay(), `<p>例句填空正确！</p>`, { stars: 10, onOk: renderSentence }); }, 700);
+    showToast(`✅ 例句填空正确！ <span class="opacity-80">+10⭐</span>`, 'correct');
+    setTimeout(() => { practiceIdx++; renderSentence(); }, 700);
+    checkBadges();
   } else {
     btn.classList.add('wrong');
     $$('#sentence-options .choice-btn').forEach(b => { if (parseInt(b.dataset.id) === w.id) b.classList.add('correct'); });
@@ -2194,6 +2426,7 @@ function finishPractice() {
  * 13. 复习专区 Review
  * ===================================================================== */
 let wrongFilterActive = false;
+let favFilterActive = false;
 
 function renderReview() {
   $('#due-count').textContent = dueReviewIds().length;
@@ -2201,6 +2434,8 @@ function renderReview() {
   // 更新錯題篩選計數
   const wfCount = $('#wrong-filter-count');
   if (wfCount) wfCount.textContent = appState.wrongWords.length;
+  const ffCount = $('#fav-filter-count');
+  if (ffCount) ffCount.textContent = (appState.favorites || []).length;
   renderTopicFilters();
   renderVocabList('');
 }
@@ -2212,17 +2447,18 @@ function renderTopicFilters() {
   $$('.topic-chip').forEach(b => b.addEventListener('click', () => {
     $$('.topic-chip').forEach(x => { x.classList.remove('kid-btn-primary'); x.classList.add('kid-btn-ghost'); });
     b.classList.add('kid-btn-primary'); b.classList.remove('kid-btn-ghost');
-    renderVocabList($('#vocab-search').value, b.dataset.topic, wrongFilterActive);
+    renderVocabList($('#vocab-search').value, b.dataset.topic, wrongFilterActive, favFilterActive);
   }));
 }
 
-function renderVocabList(query, topic = 'all', wrongOnly = false) {
+function renderVocabList(query, topic = 'all', wrongOnly = false, favOnly = false) {
   const q = norm(query);
   const list = VOCAB.filter(w => {
     const matchTopic = topic === 'all' || w.topic === topic;
     const matchQ = !q || norm(w.word).includes(q) || norm(w.definition_cn).includes(q) || norm(w.topic).includes(q);
     const matchWrong = !wrongOnly || appState.wrongWords.includes(w.id);
-    return matchTopic && matchQ && matchWrong;
+    const matchFav = !favOnly || (appState.favorites || []).includes(w.id);
+    return matchTopic && matchQ && matchWrong && matchFav;
   });
   const container = $('#vocab-list');
   container.innerHTML = list.map(w => {
@@ -2230,6 +2466,7 @@ function renderVocabList(query, topic = 'all', wrongOnly = false) {
     const lvl = m.level || 0;
     const dots = '●'.repeat(lvl) + '○'.repeat(5 - lvl);
     const isWrong = appState.wrongWords.includes(w.id);
+    const isFav = (appState.favorites || []).includes(w.id);
     return `
       <div class="kid-card p-3 vocab-item" data-id="${w.id}">
         <div class="flex items-center justify-between">
@@ -2243,6 +2480,7 @@ function renderVocabList(query, topic = 'all', wrongOnly = false) {
           </div>
           <div class="flex items-center gap-2 flex-shrink-0">
             <p class="text-xs text-grass font-bold tracking-wider">${dots}</p>
+            <button class="fav-star-btn text-sm vocab-fav-btn ${isFav ? 'active' : ''}" data-id="${w.id}" title="收藏"><i class="fa-solid fa-star"></i></button>
             <button class="text-sky text-sm vocab-speak-btn" data-word="${w.word.replace(/"/g, '&quot;')}" title="服读"><i class="fa-solid fa-volume-high"></i></button>
             <button class="text-gray-300 text-sm vocab-expand-btn" title="展开详情"><i class="fa-solid fa-chevron-down"></i></button>
           </div>
@@ -2302,6 +2540,33 @@ function renderVocabList(query, topic = 'all', wrongOnly = false) {
         wrongBtn.classList.add('kid-btn-primary'); wrongBtn.classList.remove('kid-btn-ghost');
       }
       saveState();
+      return;
+    }
+    // 收藏切換
+    const favBtn = e.target.closest('.vocab-fav-btn');
+    if (favBtn) {
+      e.stopPropagation();
+      const wid = parseInt(favBtn.dataset.id);
+      if (!appState.favorites) appState.favorites = [];
+      const idx = appState.favorites.indexOf(wid);
+      if (idx >= 0) {
+        appState.favorites.splice(idx, 1);
+        favBtn.classList.remove('active');
+      } else {
+        appState.favorites.push(wid);
+        favBtn.classList.add('active', 'just-fav');
+        setTimeout(() => favBtn.classList.remove('just-fav'), 400);
+        sfxClick();
+      }
+      saveState();
+      checkBadges();
+      const ffCount = $('#fav-filter-count');
+      if (ffCount) ffCount.textContent = appState.favorites.length;
+      // 若目前為「只看收藏」模式且已取消收藏，需重新渲染以移除該項
+      if (favFilterActive && idx >= 0) {
+        const topic = $('.topic-chip.kid-btn-primary')?.dataset.topic || 'all';
+        renderVocabList($('#vocab-search').value, topic, wrongFilterActive, favFilterActive);
+      }
       return;
     }
     // 展開/收起詳情
@@ -2679,6 +2944,14 @@ function showDayDetail(day) {
  * ===================================================================== */
 function renderRewards() {
   $('#reward-stars').textContent = appState.totalStars;
+  // 稱號進度
+  const rk = rankOf(appState.totalStars);
+  const rankBadgeEl = $('#rank-current-badge');
+  const rankNextEl = $('#rank-next-text');
+  const rankFillEl = $('#rank-progress-fill');
+  if (rankBadgeEl) rankBadgeEl.textContent = `${rk.icon} ${rk.title}`;
+  if (rankNextEl) rankNextEl.textContent = rk.next ? `距「${rk.next.title}」还差 ${rk.next.min - appState.totalStars} ⭐` : '已达最高称号！';
+  if (rankFillEl) rankFillEl.style.width = rk.pct + '%';
   $('#badge-wall').innerHTML = BADGES.map(b => {
     const unlocked = appState.badges.includes(b.id);
     return `<div class="badge-tile ${unlocked ? 'unlocked' : 'locked'}">
@@ -2725,14 +2998,32 @@ function renderRewards() {
   });
 }
 
+// 徽章解鎖佇列化：避免多個徽章同時解鎖時彈窗互相覆蓋
+let _badgeUnlockQueue = [];
+let _badgeUnlockShowing = false;
 function checkBadges() {
+  const newlyUnlocked = [];
   BADGES.forEach(b => {
     if (!appState.badges.includes(b.id) && b.check(appState)) {
       appState.badges.push(b.id);
-      addStars(30);
-      saveState();
-      setTimeout(() => showResultModal('解锁新徽章！', `<div class="text-5xl my-2">${b.icon}</div><p class="text-lg font-extrabold text-ink">${b.name}</p><p class="text-sm text-gray-400">${b.desc}</p><p class="text-amber-500 font-bold mt-2">+30 星星奖励</p>`, { stars: 30, mascot: '🎉' }), 600);
+      appState.totalStars += 30;
+      newlyUnlocked.push(b);
     }
+  });
+  if (newlyUnlocked.length) {
+    saveState();
+    _badgeUnlockQueue.push(...newlyUnlocked);
+    if (!_badgeUnlockShowing) processBadgeQueue();
+  }
+}
+function processBadgeQueue() {
+  if (!_badgeUnlockQueue.length) { _badgeUnlockShowing = false; return; }
+  _badgeUnlockShowing = true;
+  const b = _badgeUnlockQueue.shift();
+  sfxBadge();
+  showResultModal('解锁新徽章！', `<div class="text-5xl my-2">${b.icon}</div><p class="text-lg font-extrabold text-ink">${b.name}</p><p class="text-sm text-gray-400">${b.desc}</p><p class="text-amber-500 font-bold mt-2">+30 星星奖励</p>`, {
+    stars: 30, mascot: '🎉',
+    onOk: () => setTimeout(processBadgeQueue, 250)
   });
 }
 
@@ -2788,6 +3079,45 @@ function exportProgress() {
   a.click();
   URL.revokeObjectURL(url);
   showResultModal('导出成功', '<p>进度备份已下载到本地</p>', { mascot: '💾' });
+}
+
+function restoreProgress() {
+  const html = `
+    <span class="mascot lg">📂</span>
+    <h3 class="text-2xl font-extrabold text-ink mt-2">恢复进度备份</h3>
+    <p class="text-gray-500 text-sm mt-3 text-left">选择之前导出的备份 JSON 文件，将覆盖目前的学习进度、星星、徽章与设置。</p>
+    <input id="restore-file" type="file" accept=".json,application/json" class="block w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-sky file:text-white file:font-bold mt-3" />
+    <div class="grid grid-cols-2 gap-3 mt-4">
+      <button class="modal-cancel kid-btn kid-btn-ghost h-12">取消</button>
+      <button id="restore-confirm" class="kid-btn kid-btn-coral h-12">确认恢复</button>
+    </div>
+  `;
+  showModal(html, root => {
+    $('.modal-cancel', root).addEventListener('click', closeModal);
+    $('#restore-confirm', root).addEventListener('click', () => {
+      const file = $('#restore-file').files[0];
+      if (!file) { alert('请先选择备份文件'); return; }
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          if (!parsed || typeof parsed !== 'object' || !parsed.state) throw new Error('备份文件格式不正确');
+          appState = Object.assign(defaultState(), parsed.state);
+          if (Array.isArray(parsed.vocab) && parsed.vocab.length) {
+            VOCAB = parsed.vocab;
+            window.PET_VOCAB = parsed.vocab;
+            PLAN = buildPlan();
+          }
+          saveState();
+          closeModal();
+          showResultModal('恢复成功！', '<p>你的学习进度已恢复</p>', { mascot: '🎉', onOk: () => { showPage('home'); location.reload(); } });
+        } catch (err) {
+          alert('文件格式错误：' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    });
+  });
 }
 
 function importVocab() {
@@ -2902,6 +3232,12 @@ function showSettings() {
         <input id="setting-motion" type="checkbox" ${appState.reducedMotion ? 'checked' : ''} class="w-6 h-6 accent-sky" />
       </label>
 
+      <!-- 音效开关 -->
+      <label class="flex items-center justify-between kid-card p-3">
+        <span class="text-sm font-bold text-ink"><i class="fa-solid fa-volume-high text-sky"></i> 音效反馈</span>
+        <input id="setting-sound" type="checkbox" ${appState.soundEnabled !== false ? 'checked' : ''} class="w-6 h-6 accent-sky" />
+      </label>
+
       <button id="setting-tutorial" class="kid-btn kid-btn-ghost w-full h-12 text-sm"><i class="fa-solid fa-graduation-cap"></i> 查看新手教程</button>
       <button id="setting-clear-cache" class="kid-btn kid-btn-ghost w-full h-12 text-sm text-coral"><i class="fa-solid fa-broom"></i> 清除应用缓存</button>
       <button id="setting-about" class="kid-btn kid-btn-ghost w-full h-12 text-sm"><i class="fa-solid fa-circle-info"></i> 关于</button>
@@ -2946,6 +3282,12 @@ function showSettings() {
       appState.reducedMotion = e.target.checked;
       document.body.classList.toggle('reduce-motion', appState.reducedMotion);
       saveState();
+    });
+    // 音效开关
+    $('#setting-sound', root).addEventListener('change', e => {
+      appState.soundEnabled = e.target.checked;
+      saveState();
+      if (appState.soundEnabled) sfxClick();
     });
     $('#setting-tutorial', root).addEventListener('click', () => { closeModal(); showTutorial(); });
     // 清除快取
@@ -3049,13 +3391,34 @@ function bindEvents() {
     if (revealCount >= letters.length) $('#spell-hint').disabled = true;
   });
 
+  // 聽力拼寫 Tab
+  const listenPlayBtn = $('#listen-play-btn');
+  if (listenPlayBtn) listenPlayBtn.addEventListener('click', () => {
+    const w = practiceQueue[practiceIdx];
+    if (w) speak(w.word);
+    listenPlayBtn.classList.add('speaking');
+    setTimeout(() => listenPlayBtn.classList.remove('speaking'), 700);
+  });
+  const listenSubmitBtn = $('#listen-submit');
+  if (listenSubmitBtn) listenSubmitBtn.addEventListener('click', submitListen);
+  const listenInputEl = $('#listen-input');
+  if (listenInputEl) listenInputEl.addEventListener('keydown', e => { if (e.key === 'Enter') submitListen(); });
+  const listenHintBtn = $('#listen-hint');
+  if (listenHintBtn) listenHintBtn.addEventListener('click', () => {
+    const w = practiceQueue[practiceIdx];
+    if (!w) return;
+    showToast(`💡 释义：${w.definition_cn}`);
+    practiceScore = Math.max(0, practiceScore - 3);
+    $('#practice-score').textContent = '得分 ' + practiceScore;
+  });
+
   $('#review-due').addEventListener('click', () => startReviewMode('due'));
   $('#review-wrong').addEventListener('click', () => startReviewMode('wrong'));
   const fcBtn = $('#btn-flashcard');
   if (fcBtn) fcBtn.addEventListener('click', showFlashcardMode);
   $('#vocab-search').addEventListener('input', e => {
     const topic = $('.topic-chip.kid-btn-primary')?.dataset.topic || 'all';
-    renderVocabList(e.target.value, topic, wrongFilterActive);
+    renderVocabList(e.target.value, topic, wrongFilterActive, favFilterActive);
   });
 
   // 錯題篩選按鈕
@@ -3065,7 +3428,18 @@ function bindEvents() {
       wrongFilterActive = !wrongFilterActive;
       btnWrongFilter.classList.toggle('active', wrongFilterActive);
       const topic = $('.topic-chip.kid-btn-primary')?.dataset.topic || 'all';
-      renderVocabList($('#vocab-search').value, topic, wrongFilterActive);
+      renderVocabList($('#vocab-search').value, topic, wrongFilterActive, favFilterActive);
+    });
+  }
+
+  // 收藏篩選按鈕
+  const btnFavFilter = $('#btn-fav-filter');
+  if (btnFavFilter) {
+    btnFavFilter.addEventListener('click', () => {
+      favFilterActive = !favFilterActive;
+      btnFavFilter.classList.toggle('active', favFilterActive);
+      const topic = $('.topic-chip.kid-btn-primary')?.dataset.topic || 'all';
+      renderVocabList($('#vocab-search').value, topic, wrongFilterActive, favFilterActive);
     });
   }
 
@@ -3074,6 +3448,7 @@ function bindEvents() {
   $('#test-final').addEventListener('click', () => startTest('final'));
 
   $('#btn-export').addEventListener('click', exportProgress);
+  $('#btn-restore').addEventListener('click', restoreProgress);
   $('#btn-import-vocab').addEventListener('click', importVocab);
   $('#btn-reset').addEventListener('click', resetProgress);
   // 雲端同步按鈕
