@@ -818,6 +818,12 @@
         <div style="height:260px;"><canvas id="chart-topic"></canvas></div>
       </div>
 
+      <!-- 弱點主题提示 -->
+      <div id="weak-topics-card" class="kid-card p-4 mb-4 hidden">
+        <p class="font-bold text-ink text-sm mb-3"><i class="fa-solid fa-triangle-exclamation text-sun"></i> 建議加強主题</p>
+        <div id="weak-topics-list" class="space-y-2"></div>
+      </div>
+
       <button id="btn-cloud-sync" class="kid-btn kid-btn-primary w-full h-14 mb-3"><i class="fa-solid fa-cloud-arrow-up"></i> <span id="btn-cloud-sync-text">登入并开启雲端同步</span></button>
       <button id="btn-export" class="kid-btn kid-btn-ghost w-full h-14 mb-3"><i class="fa-solid fa-download"></i> 导出进度备份</button>
       <button id="btn-restore" class="kid-btn kid-btn-ghost w-full h-14 mb-3"><i class="fa-solid fa-rotate-left"></i> 恢复进度备份</button>
@@ -849,7 +855,7 @@
           <span id="rank-next-text" class="text-xs text-gray-400 font-semibold"></span>
         </div>
         <div class="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-          <div id="rank-progress-fill" class="h-full bg-sky rounded-full transition-all duration-500" style="width:0%"></div>
+          <div id="reward-rank-fill" class="h-full bg-sky rounded-full transition-all duration-500" style="width:0%"></div>
         </div>
       </div>
 
@@ -2069,10 +2075,16 @@ function renderLearnCard() {
   // 卡片滑入動畫
   area.style.opacity = '0';
   area.style.transform = 'translateX(30px)';
+  const isFavNow = (appState.favorites || []).includes(w.id);
   area.innerHTML = `
     <div class="flex justify-between items-center mb-3">
       <span class="text-xs font-bold text-sky bg-sky/10 px-3 py-1 rounded-full">${w.topic}</span>
-      <span class="text-xs font-bold text-gray-400">${w.pos} · ${w.frequency}</span>
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-bold text-gray-400">${w.pos} · ${w.frequency}</span>
+        <button id="learn-btn-fav" class="w-8 h-8 rounded-full flex items-center justify-center transition-all ${isFavNow ? 'text-coral bg-coral/10' : 'text-gray-300 hover:text-coral hover:bg-coral/10'}" title="${isFavNow ? '取消收藏' : '收藏单字'}" aria-label="收藏">
+          <i class="fa-${isFavNow ? 'solid' : 'regular'} fa-heart text-sm"></i>
+        </button>
+      </div>
     </div>
     <div class="flex-1 flex flex-col items-center justify-center text-center">
       <p class="vocab-word text-ink select-all cursor-pointer" title="點擊對比拼寫">${w.word}</p>
@@ -2099,12 +2111,32 @@ function renderLearnCard() {
     area.style.opacity = '1';
     area.style.transform = 'translateX(0)';
   });
-  // 例句按鈕事件
+  // 例句按鈕事件 + 收藏按鈕事件
   setTimeout(() => {
     const sentBtn = document.getElementById('learn-btn-sentence');
     if (sentBtn) sentBtn.addEventListener('click', (e) => { e.stopPropagation(); speakSentence(w.example_en); });
     const exCard = document.getElementById('learn-example-card');
     if (exCard) exCard.addEventListener('click', () => speakSentence(w.example_en));
+    const favBtn = document.getElementById('learn-btn-fav');
+    if (favBtn) favBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!appState.favorites) appState.favorites = [];
+      const idx = appState.favorites.indexOf(w.id);
+      if (idx === -1) {
+        appState.favorites.push(w.id);
+        favBtn.className = 'w-8 h-8 rounded-full flex items-center justify-center transition-all text-coral bg-coral/10';
+        favBtn.innerHTML = '<i class="fa-solid fa-heart text-sm"></i>';
+        favBtn.title = '取消收藏';
+        showToast('❤️ 已收藏！可在從詞頁「只看收藏」查看', 'correct');
+      } else {
+        appState.favorites.splice(idx, 1);
+        favBtn.className = 'w-8 h-8 rounded-full flex items-center justify-center transition-all text-gray-300 hover:text-coral hover:bg-coral/10';
+        favBtn.innerHTML = '<i class="fa-regular fa-heart text-sm"></i>';
+        favBtn.title = '收藏单字';
+        showToast('取消收藏', '');
+      }
+      saveState();
+    });
   }, 50);
   speak(w.word);
 }
@@ -2924,9 +2956,41 @@ function renderProgress() {
   if (chartTopic) chartTopic.destroy();
   chartTopic = new Chart($('#chart-topic'), {
     type: 'bar',
-    data: { labels: topics, datasets: [{ label: '掌握率%', data, backgroundColor: '#4FC3F7', borderRadius: 8 }] },
+    data: { labels: topics, datasets: [{ label: '掌握率%', data, backgroundColor: data.map(v => v >= 60 ? '#81C784' : v >= 30 ? '#FFD54F' : '#FF8A65'), borderRadius: 8 }] },
     options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 100, beginAtZero: true } }, plugins: { legend: { display: false } } }
   });
+
+  // 弱點主题分析：取掌握率最低的 3 個主题（至少已學過該主题至少 1 個字）
+  const topicStats = topics.map((t, i) => {
+    const ids = VOCAB.filter(w => w.topic === t).map(w => w.id);
+    const learnedIds = ids.filter(id => (masteryOf(id).level || 0) > 0);
+    return { topic: t, pct: data[i], total: ids.length, learned: learnedIds.length };
+  }).filter(ts => ts.learned > 0); // 只顯示已學過的主题
+  const weakTopics = [...topicStats].sort((a, b) => a.pct - b.pct).slice(0, 3).filter(ts => ts.pct < 80);
+  const weakCard = $('#weak-topics-card');
+  const weakList = $('#weak-topics-list');
+  if (weakCard && weakList) {
+    if (weakTopics.length > 0) {
+      weakCard.classList.remove('hidden');
+      weakList.innerHTML = weakTopics.map(ts => {
+        const color = ts.pct >= 50 ? 'text-sun' : 'text-coral';
+        const icon = ts.pct >= 50 ? '🟡' : '🔴';
+        return `<div class="flex items-center justify-between bg-soft rounded-xl px-3 py-2">
+          <div class="flex items-center gap-2">
+            <span>${icon}</span>
+            <span class="text-sm font-bold text-ink">${ts.topic}</span>
+            <span class="text-xs text-gray-400">${ts.learned}/${ts.total} 已學</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-extrabold ${color}">${ts.pct}%</span>
+            <button class="text-xs bg-sky/10 text-sky px-2 py-0.5 rounded-full font-bold hover:bg-sky/20 transition-colors" onclick="document.querySelector('.nav-item[data-page=review]').click(); setTimeout(() => { const chip = document.querySelector('.topic-chip[data-topic=\'${ts.topic}\']'); if(chip) chip.click(); }, 400);">去複習</button>
+          </div>
+        </div>`;
+      }).join('');
+    } else {
+      weakCard.classList.add('hidden');
+    }
+  }
 
   // 統計摘要卡片
   const doneDays = Object.values(appState.dailyRecords).filter(r => r.completed).length;
@@ -3030,7 +3094,7 @@ function renderRewards() {
   const rk = rankOf(appState.totalStars);
   const rankBadgeEl = $('#rank-current-badge');
   const rankNextEl = $('#rank-next-text');
-  const rankFillEl = $('#rank-progress-fill');
+  const rankFillEl = $('#reward-rank-fill');
   if (rankBadgeEl) rankBadgeEl.textContent = `${rk.icon} ${rk.title}`;
   if (rankNextEl) rankNextEl.textContent = rk.next ? `距「${rk.next.title}」还差 ${rk.next.min - appState.totalStars} ⭐` : '已达最高称号！';
   if (rankFillEl) rankFillEl.style.width = rk.pct + '%';
@@ -3088,10 +3152,13 @@ function checkBadges() {
   BADGES.forEach(b => {
     if (!appState.badges.includes(b.id) && b.check(appState)) {
       appState.badges.push(b.id);
-      appState.totalStars += 30;
       newlyUnlocked.push(b);
     }
   });
+  // 統一通過 addStars 發放得星，確保稱號升級彈窗和音效正常觸發
+  if (newlyUnlocked.length) {
+    newlyUnlocked.forEach(() => addStars(30));
+  }
   if (newlyUnlocked.length) {
     saveState();
     _badgeUnlockQueue.push(...newlyUnlocked);
@@ -3227,7 +3294,17 @@ function importVocab() {
           window.PET_VOCAB = arr;
           PLAN = buildPlan();
           const ids = new Set(arr.map(w => w.id));
+          // 清理所有失效 ID：wordMastery / wrongWords / favorites
           Object.keys(appState.wordMastery).forEach(k => { if (!ids.has(parseInt(k))) delete appState.wordMastery[k]; });
+          appState.wrongWords = (appState.wrongWords || []).filter(id => ids.has(id));
+          appState.favorites = (appState.favorites || []).filter(id => ids.has(id));
+          // 清理 dailyRecords 中的 newLearned 失效 ID
+          Object.keys(appState.dailyRecords).forEach(d => {
+            const r = appState.dailyRecords[d];
+            if (r && Array.isArray(r.newLearned)) {
+              r.newLearned = r.newLearned.filter(id => ids.has(id));
+            }
+          });
           saveState();
           closeModal();
           showResultModal('导入成功！', `<p>已加载 ${arr.length} 个单词</p><p>40天计划已重新生成</p>`, { mascot: '🎉', onOk: () => showPage('home') });

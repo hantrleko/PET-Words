@@ -24,7 +24,15 @@
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [],
+  "screenshots": [
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "PET Kids 首頁 - 今日学习概览"
+    }
+  ],
   "shortcuts": [
     {
       "name": "今日学习",
@@ -38,6 +46,20 @@
       "short_name": "练习",
       "description": "进入练习中心",
       "url": "/PET-Words/?page=practice",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "测试一下",
+      "short_name": "测试",
+      "description": "开始每日小测或阶段测试",
+      "url": "/PET-Words/?page=test",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "我的进度",
+      "short_name": "进度",
+      "description": "查看学习进度与统计",
+      "url": "/PET-Words/?page=progress",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
