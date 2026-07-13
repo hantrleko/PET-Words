@@ -44,6 +44,47 @@
     --ink:   #1f2937;
     --paper: #fffdf7;
     --soft:  #f3f8fc;
+    --card-bg: #ffffff;
+    --nav-bg: #ffffff;
+    --input-bg: #f3f8fc;
+  }
+
+  /* ===== 深色模式 ===== */
+  body.dark-mode {
+    --ink:   #e8edf3;
+    --paper: #0f1117;
+    --soft:  #1a1f2e;
+    --card-bg: #1e2433;
+    --nav-bg: #161b27;
+    --input-bg: #252b3b;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  body.dark-mode .kid-card {
+    background: var(--card-bg);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  }
+  body.dark-mode .nav-bar {
+    background: var(--nav-bg);
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.3);
+  }
+  body.dark-mode input, body.dark-mode textarea {
+    background: var(--input-bg);
+    color: var(--ink);
+    border-color: rgba(255,255,255,0.1);
+  }
+  body.dark-mode .bg-white {
+    background: var(--card-bg) !important;
+  }
+  body.dark-mode .text-gray-500 { color: #8b95a8 !important; }
+  body.dark-mode .text-gray-400 { color: #6b7585 !important; }
+  body.dark-mode .bg-soft { background: var(--soft) !important; }
+  body.dark-mode .modal-box {
+    background: var(--card-bg);
+    color: var(--ink);
+  }
+  body.dark-mode .top-bar {
+    background: var(--nav-bg);
   }
 
   * { -webkit-tap-highlight-color: transparent; }
@@ -502,6 +543,20 @@
         </div>
         <div class="h-3 bg-soft rounded-full overflow-hidden">
           <div id="daily-goal-fill" class="h-full bg-gradient-to-r from-coral to-sun rounded-full transition-all" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- 今日到期複習智能卡片 -->
+      <div id="due-review-card" class="kid-card w-full p-4 mb-2 hidden">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="w-11 h-11 rounded-2xl bg-grass/15 flex items-center justify-center"><i class="fa-solid fa-brain text-grass text-lg"></i></span>
+            <div class="text-left">
+              <p class="font-bold text-ink">今日到期複習</p>
+              <p class="text-xs text-gray-400"><span id="due-review-count">0</span> 個字到期，贏按間隔複習更有效</p>
+            </div>
+          </div>
+          <button id="btn-due-review" class="kid-btn kid-btn-primary text-xs px-3 h-9">立刻複習</button>
         </div>
       </div>
 
@@ -1872,6 +1927,32 @@ const WORD_TIPS = {
   }
 };
 
+/* =====================================================================
+ * 7c. POS 詞性標準化顯示層
+ * 原始資料中存在 n/v, phr v, phrasal v, exclam 等複合/非標準標籤
+ * 此函數統一轉換為友好的中文顯示，不修改原始資料
+ * ===================================================================== */
+const POS_MAP = {
+  n: '名詞', v: '動詞', adj: '形容詞', adv: '副詞',
+  prep: '介詞', conj: '連接詞', pron: '代詞', num: '數詞',
+  det: '限定詞', modal: '情態動詞', int: '感嘆詞', art: '冠詞',
+  ord: '序數詞', exclam: '感嘆詞', phr: '片語', phrasal: '片語動詞'
+};
+
+function normalizePosLabel(pos) {
+  if (!pos) return '';
+  const raw = pos.trim().toLowerCase();
+  // 處理 "phr v" 和 "phrasal v"
+  if (raw === 'phr v' || raw === 'phrasal v' || raw === 'phrasal verb') return '片語動詞';
+  // 處理複合詞性（如 n/v, adj/n, v/n 等）
+  if (raw.includes('/')) {
+    const parts = raw.split('/').map(p => p.trim());
+    const primary = POS_MAP[parts[0]] || parts[0].toUpperCase();
+    return parts.length > 1 ? `${primary} <span class="text-[9px] text-gray-400 font-normal">多詞性</span>` : primary;
+  }
+  return POS_MAP[raw] || pos.toUpperCase();
+}
+
 function getWordTip(word) {
   const w = (word || '').toLowerCase();
   // 先查特定單字
@@ -2014,6 +2095,19 @@ function renderHome() {
   if (elGoalDone) elGoalDone.textContent = todayLearned;
   if (elGoalTarget) elGoalTarget.textContent = goal;
   if (elGoalFill) elGoalFill.style.width = goalPct + '%';
+
+  // 今日到期複習卡片
+  const dueIds = dueReviewIds();
+  const dueCard = $('#due-review-card');
+  const dueCountEl = $('#due-review-count');
+  if (dueCard) {
+    if (dueIds.length > 0) {
+      dueCard.classList.remove('hidden');
+      if (dueCountEl) dueCountEl.textContent = dueIds.length;
+    } else {
+      dueCard.classList.add('hidden');
+    }
+  }
 }
 
 /* =====================================================================
@@ -2080,7 +2174,7 @@ function renderLearnCard() {
     <div class="flex justify-between items-center mb-3">
       <span class="text-xs font-bold text-sky bg-sky/10 px-3 py-1 rounded-full">${w.topic}</span>
       <div class="flex items-center gap-2">
-        <span class="text-xs font-bold text-gray-400">${w.pos} · ${w.frequency}</span>
+        <span class="text-xs font-bold text-gray-400">${normalizePosLabel(w.pos)} · ${w.frequency}</span>
         <button id="learn-btn-fav" class="w-8 h-8 rounded-full flex items-center justify-center transition-all ${isFavNow ? 'text-coral bg-coral/10' : 'text-gray-300 hover:text-coral hover:bg-coral/10'}" title="${isFavNow ? '取消收藏' : '收藏单字'}" aria-label="收藏">
           <i class="fa-${isFavNow ? 'solid' : 'regular'} fa-heart text-sm"></i>
         </button>
@@ -2369,16 +2463,31 @@ function nextSpelling() {
   renderSpelling();
 }
 
+// 選擇題模式：0 = 看中文選英文（預設）, 1 = 看英文選中文（反向題）
+let _choiceReverse = false;
+
 function renderChoice() {
   if (practiceIdx >= practiceQueue.length) { finishPractice(); return; }
   const w = practiceQueue[practiceIdx];
-  $('#choice-def').textContent = w.definition_cn;
-  $('#choice-phonetic').textContent = w.phonetic;
+  // 50% 機率出反向題（看英文選中文）
+  _choiceReverse = Math.random() < 0.5;
   const distractors = shuffle(VOCAB.filter(x => x.id !== w.id)).slice(0, 3);
   const options = shuffle([w, ...distractors]);
-  $('#choice-options').innerHTML = options.map(o => `
-    <button class="choice-btn" data-id="${o.id}">${o.word}</button>
-  `).join('');
+  if (_choiceReverse) {
+    // 反向題：顯示英文字，選項為中文釋義
+    $('#choice-def').innerHTML = `<span class="text-2xl font-extrabold text-ink">${w.word}</span><br><span class="text-sm text-gray-400">${w.phonetic}</span>`;
+    $('#choice-phonetic').textContent = '選出正確的中文釋義';
+    $('#choice-options').innerHTML = options.map(o => `
+      <button class="choice-btn" data-id="${o.id}">${o.definition_cn}</button>
+    `).join('');
+  } else {
+    // 正向題：顯示中文，選項為英文
+    $('#choice-def').textContent = w.definition_cn;
+    $('#choice-phonetic').textContent = w.phonetic;
+    $('#choice-options').innerHTML = options.map(o => `
+      <button class="choice-btn" data-id="${o.id}">${o.word}</button>
+    `).join('');
+  }
   $$('#choice-options .choice-btn').forEach(btn => {
     btn.addEventListener('click', () => onChoiceAnswer(btn, w));
   });
@@ -2387,8 +2496,7 @@ function renderChoice() {
 
 function buildWordAnalysis(w) {
   const tip = getWordTip(w.word);
-  const posMap = { n: '名詞', v: '動詞', adj: '形容詞', adv: '副詞', prep: '介詞', conj: '連接詞', pron: '代詞', num: '數詞' };
-  const posLabel = posMap[w.pos] || w.pos;
+  const posLabel = normalizePosLabel(w.pos);
   return `
     <div class="mt-3 text-left space-y-1.5">
       <div class="flex items-center gap-2">
@@ -3385,6 +3493,12 @@ function showSettings() {
         <p class="text-[10px] text-gray-400 mt-1">影响首页「每日目标」進度条計算</p>
       </div>
 
+      <!-- 深色模式切換 -->
+      <label class="flex items-center justify-between kid-card p-3">
+        <span class="text-sm font-bold text-ink"><i class="fa-solid fa-moon text-indigo-400"></i> 深色模式</span>
+        <input id="setting-dark" type="checkbox" ${appState.darkMode ? 'checked' : ''} class="w-6 h-6 accent-sky" />
+      </label>
+
       <!-- 动画开关 -->
       <label class="flex items-center justify-between kid-card p-3">
         <span class="text-sm font-bold text-ink">减少动画</span>
@@ -3435,6 +3549,13 @@ function showSettings() {
         saveState();
         speak('Testing speed!', _ttsRate);
       });
+    });
+    // 深色模式切換
+    const darkToggle = $('#setting-dark', root);
+    if (darkToggle) darkToggle.addEventListener('change', e => {
+      appState.darkMode = e.target.checked;
+      document.body.classList.toggle('dark-mode', appState.darkMode);
+      saveState();
     });
     // 动画开关
     $('#setting-motion', root).addEventListener('change', e => {
@@ -3517,6 +3638,9 @@ function bindEvents() {
 
   $('#btn-start-today').addEventListener('click', () => showPage('learn'));
   $('#btn-quick-review').addEventListener('click', () => startReviewMode('wrong'));
+  // 今日到期複習按鈕
+  const btnDueReview = $('#btn-due-review');
+  if (btnDueReview) btnDueReview.addEventListener('click', () => startReviewMode('due'));
   $('#btn-vocab-search').addEventListener('click', () => {
     showPage('review');
     setTimeout(() => { const s = $('#vocab-search'); if (s) { s.focus(); s.select(); } }, 200);
@@ -3668,6 +3792,7 @@ function init() {
   }
   PLAN = buildPlan();
   document.body.classList.toggle('reduce-motion', appState.reducedMotion);
+  document.body.classList.toggle('dark-mode', !!appState.darkMode);
   // 同步 TTS 偏好設定
   _ttsLang = appState.ttsLang || 'en-US';
   _ttsRate = appState.ttsRate || 0.85;
