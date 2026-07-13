@@ -28,6 +28,32 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
+      - name: Validate HTML and JS
+        run: |
+          echo "=== Checking required files ==="
+          test -f index.html || (echo "ERROR: index.html missing" && exit 1)
+          test -f js/vocab-data.js || (echo "ERROR: js/vocab-data.js missing" && exit 1)
+          test -f sw.js || (echo "ERROR: sw.js missing" && exit 1)
+          test -f manifest.json || (echo "ERROR: manifest.json missing" && exit 1)
+          echo "=== Checking HTML structure ==="
+          python3 -c "
+          import sys, os
+          with open('index.html', encoding='utf-8') as f:
+              content = f.read()
+          required = ['page-home', 'page-learn', 'page-practice', 'page-review', 'nav-bar']
+          for rid in required:
+              if rid not in content:
+                  print(f'ERROR: Required element #{rid} not found')
+                  sys.exit(1)
+          print(f'OK: All required elements present')
+          size = os.path.getsize('js/vocab-data.js')
+          if size < 10000:
+              print(f'ERROR: vocab-data.js too small ({size} bytes)')
+              sys.exit(1)
+          print(f'OK: vocab-data.js size {size} bytes')
+          "
+          echo "=== All pre-deploy checks passed ==="
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
