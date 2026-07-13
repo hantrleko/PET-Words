@@ -19,8 +19,9 @@
   <!-- ===== Font Awesome 图标 — jsdelivr + bootcdn 双源 ===== -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"
         onerror="this.onerror=null;this.href='https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css'">
-  <!-- ===== Google Fonts：圆润儿童字体 + Inter — loli.net 国内镜像 ===== -->
-  <link href="https://fonts.loli.net/css2?family=Baloo+2:wght@500;700;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <!-- ===== Google Fonts：圆润儿童字体 + Inter — loli.net 国内镜像，googleapis 海外备用 ===== -->
+  <link id="font-link" href="https://fonts.loli.net/css2?family=Baloo+2:wght@500;700;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet"
+        onerror="this.onerror=null;this.href='https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Inter:wght@400;600;700&display=swap'">
   <!-- ===== Chart.js 进度统计图 — jsdelivr + bootcdn 双源 ===== -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"
           onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.0/chart.umd.min.js';document.head.appendChild(s);"></script>
@@ -92,11 +93,11 @@
   html { scroll-behavior: smooth; }
 
   body {
-    font-family: 'Baloo 2', 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Baloo 2', 'Nunito', 'Inter', system-ui, -apple-system, sans-serif;
     background: var(--paper);
     color: var(--ink);
     padding-top: 56px;
-    padding-bottom: 80px;
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
   }
 
   .top-progress-bar {
@@ -117,9 +118,11 @@
   .bottom-nav {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
     display: flex; justify-content: space-around; align-items: stretch;
-    background: #ffffffee; backdrop-filter: blur(8px);
+    background: rgba(255,255,255,.95); backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border-top: 1px solid #e5edf5;
     box-shadow: 0 -4px 18px rgba(0,0,0,.06);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .bottom-nav button {
     flex: 1; min-height: 64px;
@@ -322,6 +325,7 @@
     min-height: 220px;
     transition: transform 0.5s cubic-bezier(.4,0,.2,1);
     transform-style: preserve-3d;
+    will-change: transform;
   }
   .flashcard-wrap.flipped .flashcard-inner {
     transform: rotateY(180deg);
@@ -362,7 +366,7 @@
 
   /* ===== Toast 輕提示（取代部分彈窗，減少打斷） ===== */
   #toast-root {
-    position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+    position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
     z-index: 95; display: flex; flex-direction: column; gap: 8px;
     align-items: center; pointer-events: none; width: 100%; max-width: 380px; padding: 0 16px;
   }
@@ -662,7 +666,7 @@
           <p class="text-sm text-gray-400 font-semibold mb-1" id="spell-phonetic">/.../</p>
           <p class="text-lg font-bold text-coral mb-2" id="spell-def">释义</p>
           <div id="spell-chips" class="flex flex-wrap justify-center gap-1 my-4 min-h-[56px]"></div>
-          <input id="spell-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+          <input id="spell-input" type="text" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text"
                  class="w-full text-center text-2xl font-extrabold border-2 border-sky/30 rounded-2xl py-3 focus:outline-none focus:border-sky" placeholder="输入单词…" />
           <p class="text-xs text-gray-400 mt-2" id="spell-attempt">剩余机会：3</p>
         </div>
@@ -698,7 +702,7 @@
           <button id="listen-play-btn" class="listen-play-btn" aria-label="播放发音"><i class="fa-solid fa-volume-high"></i></button>
           <p class="text-xs text-gray-300 mt-3">可反复点击聆听</p>
           <div id="listen-chips" class="flex flex-wrap justify-center gap-1 my-4 min-h-[56px]"></div>
-          <input id="listen-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+          <input id="listen-input" type="text" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text"
                  class="w-full text-center text-2xl font-extrabold border-2 border-sky/30 rounded-2xl py-3 focus:outline-none focus:border-sky" placeholder="输入听到的单词…" />
           <p class="text-xs text-gray-400 mt-2" id="listen-attempt">剩余机会：3</p>
         </div>
@@ -958,7 +962,7 @@
   </nav>
 
   <!-- ========== Mascot 帮助提示 ========== -->
-  <button id="btn-help" class="fixed right-4 z-50 w-14 h-14 rounded-full bg-white shadow-lg flex items-center justify-center" style="bottom:92px;" aria-label="帮助">
+  <button id="btn-help" class="fixed right-4 z-50 w-14 h-14 rounded-full bg-white shadow-lg flex items-center justify-center" style="bottom:calc(92px + env(safe-area-inset-bottom, 0px));" aria-label="帮助">
     <span class="mascot" style="font-size:32px;">🦊</span>
   </button>
 
@@ -1763,22 +1767,41 @@ function showPage(name) {
 let voicesCache = [];
 let _ttsLang = 'en-US';  // 可切換：en-US / en-GB
 let _ttsRate = 0.85;     // 語速：0.6（慢）/ 0.85（正常）/ 1.1（快）
+let _ttsUnlocked = false; // Android 需要用戶手勢才能啟動音頻
 
 function loadVoices() {
-  if ('speechSynthesis' in window) {
-    voicesCache = speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
-  }
+  if (!('speechSynthesis' in window)) return;
+  const v = speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
+  if (v.length > 0) voicesCache = v;
 }
 if ('speechSynthesis' in window) {
   loadVoices();
   speechSynthesis.onvoiceschanged = loadVoices;
+  // Android Chrome 有時不觸發 onvoiceschanged，輪詢兜底
+  let _voicePollAttempts = 0;
+  const _voicePoll = setInterval(() => {
+    loadVoices();
+    _voicePollAttempts++;
+    if (voicesCache.length > 0 || _voicePollAttempts > 20) clearInterval(_voicePoll);
+  }, 300);
+}
+
+// 解鎖 Android 音頻（必須在用戶手勢回調中執行一次）
+function unlockTTS() {
+  if (_ttsUnlocked || !('speechSynthesis' in window)) return;
+  _ttsUnlocked = true;
+  const silent = new SpeechSynthesisUtterance('');
+  silent.volume = 0;
+  speechSynthesis.speak(silent);
+  // 同步觸發一次 loadVoices，確保手勢後能拿到語音列表
+  loadVoices();
 }
 
 // 選擇最佳語音：優先選 Neural/Premium/Enhanced 品質
 function pickBestVoice(lang) {
+  if (voicesCache.length === 0) loadVoices();
   const pool = voicesCache.filter(v => v.lang.startsWith(lang.split('-')[0]));
   const exact = pool.filter(v => v.lang === lang);
-  // 優先選高品質語音
   const quality = ['neural', 'premium', 'enhanced', 'natural'];
   for (const q of quality) {
     const found = exact.find(v => v.name.toLowerCase().includes(q)) ||
@@ -1790,11 +1813,12 @@ function pickBestVoice(lang) {
 
 function speak(text, rate) {
   if (!('speechSynthesis' in window)) return;
+  unlockTTS();
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = _ttsLang;
   u.rate = rate || _ttsRate;
-  u.pitch = 1.0;
+  // pitch は Android で不安定なので固定しない
   const v = pickBestVoice(_ttsLang);
   if (v) u.voice = v;
   // 朗讀中：給按鈕加動畫
@@ -2926,7 +2950,7 @@ function renderTestQuestion() {
       <p class="text-sm text-gray-400 font-semibold mb-1">拼写题 · 请输入单词</p>
       <p class="text-lg font-bold text-coral">${w.definition_cn}</p>
       <p class="text-sm text-gray-400">${w.phonetic}</p>
-      <input id="test-spell-input" type="text" autocomplete="off" class="w-full text-center text-2xl font-extrabold border-2 border-coral/30 rounded-2xl py-3 mt-4 focus:outline-none focus:border-coral" placeholder="输入单词…" />
+      <input id="test-spell-input" type="text" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text" class="w-full text-center text-2xl font-extrabold border-2 border-coral/30 rounded-2xl py-3 mt-4 focus:outline-none focus:border-coral" placeholder="输入单词…" />
     `;
     $('#test-options-area').innerHTML = `<button id="test-spell-submit" class="kid-btn kid-btn-coral w-full h-14">提交</button>`;
     $('#test-spell-submit').addEventListener('click', () => {
@@ -3656,6 +3680,9 @@ function bindEvents() {
   $('#spell-submit').addEventListener('click', submitSpelling);
   $('#spell-speak').addEventListener('click', () => { if (practiceQueue[practiceIdx]) speak(practiceQueue[practiceIdx].word); });
   $('#spell-input').addEventListener('keydown', e => { if (e.key === 'Enter') submitSpelling(); });
+  $('#spell-input').addEventListener('focus', () => {
+    setTimeout(() => { const el = $('#spell-input'); if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 300);
+  });
   $('#spell-hint').addEventListener('click', () => {
     const w = practiceQueue[practiceIdx];
     if (!w) return;
@@ -3685,7 +3712,12 @@ function bindEvents() {
   const listenSubmitBtn = $('#listen-submit');
   if (listenSubmitBtn) listenSubmitBtn.addEventListener('click', submitListen);
   const listenInputEl = $('#listen-input');
-  if (listenInputEl) listenInputEl.addEventListener('keydown', e => { if (e.key === 'Enter') submitListen(); });
+  if (listenInputEl) {
+    listenInputEl.addEventListener('keydown', e => { if (e.key === 'Enter') submitListen(); });
+    listenInputEl.addEventListener('focus', () => {
+      setTimeout(() => listenInputEl.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
+    });
+  }
   const listenReplayBtn = $('#listen-replay');
   if (listenReplayBtn) listenReplayBtn.addEventListener('click', () => {
     const w = practiceQueue[practiceIdx];
@@ -3747,6 +3779,10 @@ function bindEvents() {
   if (btnAuth) btnAuth.addEventListener('click', () => { if (window.PetSync) window.PetSync.showAuthModal(); });
   const btnCloudSync = $('#btn-cloud-sync');
   if (btnCloudSync) btnCloudSync.addEventListener('click', () => { if (window.PetSync) window.PetSync.showAuthModal(); });
+
+  // ===== Android 音頻解鎖：首次任意觸摸即解鎖 TTS =====
+  document.addEventListener('touchstart', unlockTTS, { once: true, passive: true });
+  document.addEventListener('mousedown', unlockTTS, { once: true });
 
   // ===== 全局鍵盤快捷鍵 =====
   document.addEventListener('keydown', function(e) {
