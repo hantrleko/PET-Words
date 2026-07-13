@@ -13,6 +13,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 let _supabase = null;          // Supabase client
 let _currentUser = null;       // 當前登入用戶
 let _syncDebounceTimer = null; // 防抖計時器
+let _syncInFlight = false;     // 並發鎖：避免多個 push 同時執行
 const SYNC_DEBOUNCE_MS = 2000; // 2 秒後才真正寫入雲端
 
 // ── 初始化 Supabase Client ────────────────────────────────────────────
@@ -89,20 +90,31 @@ function showSyncStatus(msg, color = 'sky') {
 function scheduleSyncToCloud() {
   if (!isLoggedIn()) return;
   clearTimeout(_syncDebounceTimer);
-  _syncDebounceTimer = setTimeout(pushProgressToCloud, SYNC_DEBOUNCE_MS);
+  _syncDebounceTimer = setTimeout(() => {
+    // If a push is still running, re-schedule for after it finishes
+    if (_syncInFlight) {
+      _syncDebounceTimer = setTimeout(() => pushProgressToCloud(), SYNC_DEBOUNCE_MS);
+      return;
+    }
+    pushProgressToCloud();
+  }, SYNC_DEBOUNCE_MS);
 }
 
 // ── 推送進度到雲端 ────────────────────────────────────────────────────
 async function pushProgressToCloud() {
   if (!isLoggedIn() || !_supabase) return;
-  if (typeof appState === 'undefined') return;
+  if (!appState?.wordMastery) return;
+  // Capture user ID immediately to guard against sign-out mid-push
+  const uid = _currentUser?.id;
+  if (!uid) return;
 
+  _syncInFlight = true;
   try {
     const persist = { ...appState };
     delete persist._todayLearnedQueue;
 
     const payload = {
-      user_id:          _currentUser.id,
+      user_id:          uid,
       current_day:      persist.currentDay      || 1,
       streak:           persist.streak          || 0,
       last_active_date: persist.lastActiveDate  || null,
@@ -150,6 +162,8 @@ async function pushProgressToCloud() {
   } catch (err) {
     console.warn('[Sync] 推送失敗：', err.message);
     showSyncStatus('同步失敗', 'coral');
+  } finally {
+    _syncInFlight = false;
   }
 }
 
@@ -194,9 +208,9 @@ async function pullAndMergeProgress() {
       ttsRate:         data.tts_rate || 0.85,
     };
 
-    const localStars  = (typeof appState !== 'undefined') ? (appState.totalStars || 0) : 0;
+    const localStars  = appState?.totalStars || 0;
     const cloudStars  = cloudState.totalStars || 0;
-    const localWords  = (typeof appState !== 'undefined') ? Object.keys(appState.wordMastery || {}).length : 0;
+    const localWords  = Object.keys(appState?.wordMastery || {}).length;
     const cloudWords  = Object.keys(cloudState.wordMastery || {}).length;
 
     // 以「星星 + 掌握詞彙數」作為進度指標，取較大值的那份
@@ -204,9 +218,7 @@ async function pullAndMergeProgress() {
     const cloudScore  = cloudStars + cloudWords;
 
     if (cloudScore > localScore) {
-      // 雲端進度更多：用雲端覆蓋本地
-
-      if (typeof appState !== 'undefined') {
+      if (appState?.wordMastery !== undefined) {
         Object.assign(appState, cloudState);
         appState._todayLearnedQueue = [];
         if (typeof saveState === 'function') saveState();

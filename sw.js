@@ -4,7 +4,7 @@
  * 策略：Cache First（靜態資源）+ Network First（API 請求）
  * ===================================================================== */
 
-const CACHE_NAME = 'pet-kids-v4';  // 每次有重大更新時遞增
+const CACHE_NAME = 'pet-kids-20260713';  // Date-stamped: update this date on each deploy
 const OFFLINE_URL = '/PET-Words/';
 
 // 預快取的核心靜態資源
