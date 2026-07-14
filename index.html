@@ -89,6 +89,12 @@
   body.dark-mode .top-bar {
     background: var(--nav-bg);
   }
+  body.dark-mode .bottom-nav {
+    background: rgba(22, 27, 39, 0.97);
+    border-top-color: rgba(255,255,255,0.08);
+  }
+  body.dark-mode .bottom-nav button { color: #6b7585; }
+  body.dark-mode .bottom-nav button.active { color: var(--sky); }
 
   * { -webkit-tap-highlight-color: transparent; }
 
@@ -119,18 +125,30 @@
 
   .bottom-nav {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
-    display: flex; justify-content: space-around; align-items: stretch;
+    display: flex; align-items: stretch;
     background: rgba(255,255,255,.95); backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border-top: 1px solid #e5edf5;
     box-shadow: 0 -4px 18px rgba(0,0,0,.06);
     padding-bottom: env(safe-area-inset-bottom, 0px);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
+  .bottom-nav::-webkit-scrollbar { display: none; }
   .bottom-nav button {
-    flex: 1; min-height: 64px;
+    flex: 0 0 auto;
+    min-width: 64px;
+    min-height: 64px;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 2px; color: #9aa6b2; font-size: 11px; font-weight: 600;
     background: transparent; border: none; transition: color .2s;
+    padding: 0 4px;
+  }
+  /* 在寬螢幕上平均分配 */
+  @media (min-width: 640px) {
+    .bottom-nav { justify-content: space-around; }
+    .bottom-nav button { flex: 1; }
   }
   .bottom-nav button.active { color: var(--sky); }
   .bottom-nav button i { font-size: 20px; }
@@ -169,6 +187,21 @@
     width: 36px; height: 48px; margin: 0 3px; border-radius: 12px;
     font-size: 24px; font-weight: 800; border: 2px solid #e5edf5;
     background: #fff; transition: all .2s;
+    flex-shrink: 0;
+  }
+  /* 小螢幕字母格自動縮小 */
+  @media (max-width: 390px) {
+    .letter-chip { width: 30px; height: 42px; font-size: 20px; margin: 0 2px; border-radius: 10px; }
+  }
+  @media (max-width: 340px) {
+    .letter-chip { width: 26px; height: 38px; font-size: 17px; margin: 0 1px; border-radius: 8px; }
+  }
+  /* 字母格容器自動換行 */
+  #spell-chips, #listen-chips {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px 0;
   }
   .letter-chip.correct { background: var(--grass); color:#fff; border-color: var(--grass); animation: pop .3s; }
   .letter-chip.wrong   { background: var(--coral); color:#fff; border-color: var(--coral); animation: shake .35s; }
@@ -177,9 +210,15 @@
   @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
 
   .choice-btn {
-    min-height: 64px; border-radius: 20px; font-size: 20px; font-weight: 700;
+    min-height: 60px; border-radius: 20px; font-size: 18px; font-weight: 700;
     background: #fff; color: var(--ink); border: 3px solid #e5edf5;
-    transition: all .18s; text-align: left; padding: 14px 20px;
+    transition: all .18s; text-align: left; padding: 12px 18px;
+    white-space: normal; word-break: break-word; line-height: 1.4;
+    display: flex; align-items: center;
+  }
+  /* 小螢幕選擇題字體縮小 */
+  @media (max-width: 390px) {
+    .choice-btn { font-size: 16px; padding: 10px 14px; border-radius: 16px; }
   }
   .choice-btn:hover { border-color: var(--sky); }
   .choice-btn.correct { background: var(--grass); color:#fff; border-color: var(--grass); animation: pop .3s; }
@@ -220,14 +259,28 @@
 
   .modal-mask {
     position: fixed; inset:0; z-index: 80; background: rgba(20,30,50,.5);
-    display:flex; align-items:center; justify-content:center; padding: 20px;
+    display:flex; align-items:flex-end; justify-content:center; padding: 0;
     animation: fadeIn .25s;
   }
-  .modal-box {
-    background: #fff; border-radius: 28px; max-width: 420px; width:100%;
-    padding: 28px 22px; text-align:center;
-    box-shadow: 0 20px 60px rgba(0,0,0,.25); animation: pop .35s;
+  /* 桌面端居中顯示 */
+  @media (min-width: 640px) {
+    .modal-mask { align-items: center; padding: 20px; }
   }
+  .modal-box {
+    background: #fff; border-radius: 28px 28px 0 0; max-width: 480px; width:100%;
+    padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px)); text-align:center;
+    box-shadow: 0 -8px 40px rgba(0,0,0,.18); animation: modalSlideUp .35s cubic-bezier(.34,1.56,.64,1);
+    max-height: 90vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  @media (min-width: 640px) {
+    .modal-box {
+      border-radius: 28px; padding: 28px 22px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+      animation: pop .35s;
+      max-height: 85vh;
+    }
+  }
+  @keyframes modalSlideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   @keyframes fadeIn { from{opacity:0} to{opacity:1} }
 
   #confetti-canvas { position: fixed; inset:0; z-index: 90; pointer-events:none; }
@@ -245,6 +298,14 @@
   @media (min-width: 640px) {
     .vocab-word { font-size: 52px; }
     .container-kid { max-width: 560px; margin: 0 auto; }
+  }
+
+  /* ===== 移動端輸入框鍵盤適配 ===== */
+  /* iOS Safari 鍵盤彈起時，輸入框不被遠跟 */
+  @supports (-webkit-touch-callout: none) {
+    input[type="text"] {
+      font-size: 16px; /* 防止 iOS 自動縮放 */
+    }
   }
 
   /* ===== TTS 朗讀動畫 ===== */
@@ -413,6 +474,126 @@
     background: var(--sun); color: var(--ink);
     box-shadow: 0 4px 0 rgba(255,213,79,.35);
   }
+
+  /* ===== 移動端全局優化 ===== */
+
+  /* 防止頁面橫向滾動 */
+  html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  /* 觸控目標最小 44×44px（WCAG 2.5.5） */
+  .nav-back, .bottom-nav button, #btn-settings, #btn-auth {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* 底部安全區域強化（iPhone X+ 劉海屏） */
+  body {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 16px));
+  }
+
+  /* 單字大卡片在小螢幕縮小字體 */
+  @media (max-width: 390px) {
+    .vocab-word { font-size: 32px; }
+    .vocab-phonetic { font-size: 15px; }
+    #learn-card-area { min-height: 360px; padding: 18px 14px; }
+  }
+  @media (max-width: 340px) {
+    .vocab-word { font-size: 26px; }
+  }
+
+  /* 統計卡片數字在小螢幕縮小 */
+  @media (max-width: 360px) {
+    #stat-streak, #stat-mastered, #stat-stars-today, #stat-stars-total {
+      font-size: 1.6rem;
+    }
+  }
+
+  /* 練習 Tab 按鈕在小螢幕等寬排列 */
+  @media (max-width: 390px) {
+    .practice-tab { font-size: 12px; padding: 0 6px; }
+    .practice-tab i { font-size: 14px; }
+  }
+
+  /* 速記卡片在小螢幕縮小 */
+  @media (max-width: 390px) {
+    .flashcard-inner { min-height: 180px; }
+    .flashcard-front, .flashcard-back { padding: 16px; }
+  }
+
+  /* 底部 Nav 按鈕文字在極小螢幕隱藏 */
+  @media (max-width: 320px) {
+    .bottom-nav button span { display: none; }
+    .bottom-nav button { min-height: 56px; }
+  }
+
+  /* 長單字不溢出卡片 */
+  .vocab-word {
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+  }
+
+  /* 主題篩選 chips 橫向滾動（不換行） */
+  #topic-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+  #topic-filters::-webkit-scrollbar { display: none; }
+
+  /* 進度日曆在小螢幕縮小格子 */
+  @media (max-width: 360px) {
+    .day-cell { border-radius: 10px; font-size: 11px; }
+    #progress-calendar { gap: 4px; }
+  }
+
+  /* 深色模式下輸入框顏色 */
+  body.dark-mode #spell-input,
+  body.dark-mode #listen-input,
+  body.dark-mode #vocab-search {
+    background: var(--input-bg);
+    color: var(--ink);
+    border-color: rgba(255,255,255,0.15);
+  }
+  body.dark-mode #spell-input::placeholder,
+  body.dark-mode #listen-input::placeholder,
+  body.dark-mode #vocab-search::placeholder {
+    color: #6b7585;
+  }
+
+  /* 深色模式下選擇題按鈕 */
+  body.dark-mode .choice-btn {
+    background: var(--card-bg);
+    color: var(--ink);
+    border-color: rgba(255,255,255,0.12);
+  }
+  body.dark-mode .choice-btn:hover { border-color: var(--sky); }
+
+  /* 深色模式下 letter-chip */
+  body.dark-mode .letter-chip {
+    background: var(--card-bg);
+    color: var(--ink);
+    border-color: rgba(255,255,255,0.15);
+  }
+
+  /* 深色模式下 vocab-card */
+  body.dark-mode .vocab-card {
+    background: linear-gradient(160deg, #1e2433, #1a2030);
+    border-color: rgba(255,255,255,0.08);
+    box-shadow: 0 14px 40px rgba(0,0,0,0.4);
+  }
+
+  /* 深色模式下 kid-btn-ghost */
+  body.dark-mode .kid-btn-ghost {
+    background: var(--card-bg);
+    color: var(--ink);
+    border-color: rgba(255,255,255,0.15);
+  }
   </style>
 
   <script>
@@ -452,6 +633,16 @@
   <div id="offline-banner" class="hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-center gap-2 bg-gray-700 text-white text-xs font-semibold py-2 px-4">
     <i class="fa-solid fa-wifi-slash"></i>
     <span>当前离线 — 学习进度将在恢复网络后同步</span>
+  </div>
+
+  <!-- ========== iOS 安裝提示橫幅 ========== -->
+  <div id="ios-install-banner" class="hidden fixed bottom-0 left-0 right-0 z-75 flex items-center gap-3 px-4 py-3 bg-white border-t border-gray-100 shadow-lg" style="padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:75;">
+    <img src="icons/icon-192.png" alt="" class="w-10 h-10 rounded-xl flex-shrink-0" />
+    <div class="flex-1 min-w-0">
+      <p class="text-xs font-extrabold text-ink">加入主畫面，隨時學習！</p>
+      <p class="text-[11px] text-gray-400">點 <span class="font-bold">分享</span> <i class="fa-solid fa-arrow-up-from-bracket text-sky"></i> 再選「加入主畫面」</p>
+    </div>
+    <button id="ios-install-dismiss" class="text-gray-300 text-xl flex-shrink-0 w-8 h-8 flex items-center justify-center" aria-label="關閉">✕</button>
   </div>
 
   <!-- ========== 顶部全局进度条 ========== -->
@@ -773,7 +964,7 @@
           <span class="text-xs text-gray-300">|主題筛選：</span>
         </div>
         <div class="flex flex-wrap gap-2 mb-3" id="topic-filters"></div>
-        <div id="vocab-list" class="max-h-[360px] overflow-y-auto space-y-2 pr-1"></div>
+        <div id="vocab-list" class="overflow-y-auto space-y-2 pr-1" style="max-height: min(360px, calc(100dvh - 320px));"></div>
       </div>
     </section>
 
@@ -3759,6 +3950,41 @@ function bindEvents() {
   $$('.nav-item').forEach(b => b.addEventListener('click', () => showPage(b.dataset.page)));
   $$('.nav-back').forEach(b => b.addEventListener('click', () => showPage('home')));
 
+  /* ===== 移動端鍵盤彈起適配：visulaViewport API ===== */
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      // 鍵盤彈起時，確保焦點元素可見
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+        setTimeout(() => {
+          activeEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }, 100);
+      }
+    });
+  }
+
+  /* ===== 底部導航高亮目前頁面對應按鈕 ===== */
+  function updateNavHighlight(pageId) {
+    $$('.nav-item').forEach(b => {
+      b.classList.toggle('active', b.dataset.page === pageId);
+    });
+    // 對應按鈕滾入可視區
+    const activeBtn = $(`.nav-item[data-page="${pageId}"]`);
+    if (activeBtn) {
+      activeBtn.scrollIntoView({ inline: 'nearest', behavior: 'smooth', block: 'nearest' });
+    }
+  }
+  // 覆寫 showPage 以加入 nav highlight 更新
+  const _origShowPage = showPage;
+  window._navHighlightHooked = true;
+  // 在 showPage 函數末尾加入導航高亮更新
+  const navItems = $$('.nav-item');
+  navItems.forEach(b => {
+    b.addEventListener('click', () => {
+      setTimeout(() => updateNavHighlight(b.dataset.page), 50);
+    });
+  });
+
   $('#btn-start-today').addEventListener('click', () => showPage('learn'));
   $('#btn-quick-review').addEventListener('click', () => startReviewMode('wrong'));
   // 今日到期複習按鈕
@@ -3948,6 +4174,25 @@ function init() {
   const targetPage = urlParams.get('page');
   if (targetPage && ['learn', 'practice', 'review', 'test', 'progress', 'rewards', 'plan'].includes(targetPage)) {
     setTimeout(() => showPage(targetPage), 100);
+  }
+
+  // iOS 安裝提示：在 iOS Safari 且未安裝 PWA 時顯示
+  const iosBanner = $('#ios-install-banner');
+  if (iosBanner) {
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isSafari = /safari/i.test(navigator.userAgent) && !/chrome|crios|fxios/i.test(navigator.userAgent);
+    const isStandalone = window.navigator.standalone === true;
+    const dismissed = localStorage.getItem('ios-install-dismissed');
+    if (isIOS && isSafari && !isStandalone && !dismissed) {
+      setTimeout(() => { iosBanner.classList.remove('hidden'); }, 3000);
+    }
+    const dismissBtn = $('#ios-install-dismiss');
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', () => {
+        iosBanner.classList.add('hidden');
+        localStorage.setItem('ios-install-dismissed', '1');
+      });
+    }
   }
 }
 
