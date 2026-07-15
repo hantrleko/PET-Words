@@ -2009,74 +2009,163 @@ let voicesCache = [];
 let _ttsLang = 'en-US';  // 可切換：en-US / en-GB
 let _ttsRate = 0.85;     // 語速：0.6（慢）/ 0.85（正常）/ 1.1（快）
 let _ttsUnlocked = false; // Android 需要用戶手勢才能啟動音頻
+let _ttsWatchdog = null;  // 防止 Android speechSynthesis 卡死
 
+/* ── 語音列表載入（Android 異步，需輪詢） ── */
 function loadVoices() {
   if (!('speechSynthesis' in window)) return;
-  const v = speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
-  if (v.length > 0) voicesCache = v;
+  const v = speechSynthesis.getVoices();
+  if (v.length > 0) {
+    // 優先英語語音，沒有英語時保留所有語音作為兜底
+    const en = v.filter(x => x.lang.startsWith('en'));
+    voicesCache = en.length > 0 ? en : v;
+  }
 }
 if ('speechSynthesis' in window) {
   loadVoices();
   speechSynthesis.onvoiceschanged = loadVoices;
-  // Android Chrome 有時不觸發 onvoiceschanged，輪詢兜底
+  // Android Chrome 有時不觸發 onvoiceschanged，輪詢兜底（最多嘗試 30 次 × 500ms = 15s）
   let _voicePollAttempts = 0;
   const _voicePoll = setInterval(() => {
     loadVoices();
     _voicePollAttempts++;
-    if (voicesCache.length > 0 || _voicePollAttempts > 20) clearInterval(_voicePoll);
-  }, 300);
+    if (voicesCache.length > 0 || _voicePollAttempts > 30) clearInterval(_voicePoll);
+  }, 500);
 }
 
-// 解鎖 Android 音頻（必須在用戶手勢回調中執行一次）
+/* ── 解鎖 Android 音頻（必須在用戶手勢回調中執行一次） ── */
 function unlockTTS() {
-  if (_ttsUnlocked || !('speechSynthesis' in window)) return;
+  if (!('speechSynthesis' in window)) return;
+  // 修復：Android 需要 resume() 確保不在 paused 狀態
+  try { speechSynthesis.resume(); } catch(e) {}
+  if (_ttsUnlocked) return;
   _ttsUnlocked = true;
-  const silent = new SpeechSynthesisUtterance('');
-  silent.volume = 0;
-  speechSynthesis.speak(silent);
-  // 同步觸發一次 loadVoices，確保手勢後能拿到語音列表
-  loadVoices();
+  // 修復：用真實短詞解鎖，空字串在部分 Android 版本無效
+  try {
+    const u = new SpeechSynthesisUtterance('a');
+    u.volume = 0;
+    u.rate = 2; // 快速播完
+    u.onend = () => {};
+    u.onerror = () => {};
+    speechSynthesis.speak(u);
+  } catch(e) {}
+  // 解鎖後重新載入語音列表
+  setTimeout(loadVoices, 100);
 }
 
-// 選擇最佳語音：優先選 Neural/Premium/Enhanced 品質
+/* ── 選擇最佳語音 ── */
 function pickBestVoice(lang) {
   if (voicesCache.length === 0) loadVoices();
-  const pool = voicesCache.filter(v => v.lang.startsWith(lang.split('-')[0]));
+  if (voicesCache.length === 0) return null; // 讓瀏覽器用默認語音
+  const langBase = lang.split('-')[0]; // 'en'
+  const pool = voicesCache.filter(v => v.lang.startsWith(langBase));
   const exact = pool.filter(v => v.lang === lang);
-  const quality = ['neural', 'premium', 'enhanced', 'natural'];
+  const quality = ['neural', 'premium', 'enhanced', 'natural', 'google'];
   for (const q of quality) {
     const found = exact.find(v => v.name.toLowerCase().includes(q)) ||
                   pool.find(v => v.name.toLowerCase().includes(q));
     if (found) return found;
   }
-  return exact[0] || pool[0] || voicesCache[0];
+  return exact[0] || pool[0] || voicesCache[0] || null;
 }
 
+/* ── 核心 speak 函數（Android 完整修復版） ── */
 function speak(text, rate) {
-  if (!('speechSynthesis' in window)) return;
-  unlockTTS();
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = _ttsLang;
-  u.rate = rate || _ttsRate;
-  // pitch は Android で不安定なので固定しない
-  const v = pickBestVoice(_ttsLang);
-  if (v) u.voice = v;
-  // 朗讀中：給按鈕加動畫
-  u.onstart = () => {
-    document.querySelectorAll('#learn-btn-speak, #spell-speak').forEach(btn => {
-      btn.classList.add('speaking');
-    });
+  if (!text || !('speechSynthesis' in window)) return;
+
+  // 修復1：先 resume() 解除可能的 paused 狀態（Android Chrome 常見卡死）
+  try { speechSynthesis.resume(); } catch(e) {}
+
+  // 修復2：cancel 後必須延遲再 speak（Android Chrome cancel 後立即 speak 有 bug）
+  try { speechSynthesis.cancel(); } catch(e) {}
+
+  // 清除舊的 watchdog
+  if (_ttsWatchdog) { clearTimeout(_ttsWatchdog); _ttsWatchdog = null; }
+
+  const doSpeak = () => {
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = _ttsLang;
+      u.rate = rate || _ttsRate;
+      // 修復3：只在有可用語音時才設置 voice，否則讓瀏覽器用系統默認
+      const v = pickBestVoice(_ttsLang);
+      if (v) u.voice = v;
+
+      u.onstart = () => {
+        document.querySelectorAll('#learn-btn-speak, #spell-speak, .listen-play-btn').forEach(btn => {
+          btn.classList.add('speaking');
+        });
+        // 修復4：watchdog 定時器，防止 Android 卡死（15秒後強制 cancel）
+        _ttsWatchdog = setTimeout(() => {
+          try { speechSynthesis.cancel(); } catch(e) {}
+          document.querySelectorAll('#learn-btn-speak, #spell-speak, .listen-play-btn').forEach(btn => {
+            btn.classList.remove('speaking');
+          });
+        }, 15000);
+      };
+
+      const onDone = () => {
+        if (_ttsWatchdog) { clearTimeout(_ttsWatchdog); _ttsWatchdog = null; }
+        document.querySelectorAll('#learn-btn-speak, #spell-speak, .listen-play-btn').forEach(btn => {
+          btn.classList.remove('speaking');
+        });
+      };
+      u.onend = onDone;
+
+      // 修復5：onerror 處理，voices 未就緒時自動重試一次
+      u.onerror = (e) => {
+        onDone();
+        // 'not-allowed' 表示需要用戶手勢，其他錯誤嘗試重試
+        if (e.error === 'not-allowed') {
+          console.warn('[TTS] 需要用戶手勢才能播放語音');
+          showToast('請先點擊頁面任意位置，再試一次 🔊');
+        } else if (e.error === 'synthesis-failed' || e.error === 'audio-busy') {
+          // 延遲重試一次
+          setTimeout(() => {
+            try {
+              speechSynthesis.resume();
+              const u2 = new SpeechSynthesisUtterance(text);
+              u2.lang = _ttsLang;
+              u2.rate = rate || _ttsRate;
+              u2.onerror = () => {};
+              speechSynthesis.speak(u2);
+            } catch(err) {}
+          }, 300);
+        }
+      };
+
+      speechSynthesis.speak(u);
+
+      // 修復6：Android 上 speak 後立即檢查是否真的在播放，若沒有則 resume
+      setTimeout(() => {
+        if (speechSynthesis.paused) {
+          try { speechSynthesis.resume(); } catch(e) {}
+        }
+      }, 200);
+
+    } catch(err) {
+      console.error('[TTS] speak error:', err);
+    }
   };
-  u.onend = u.onerror = () => {
-    document.querySelectorAll('#learn-btn-speak, #spell-speak').forEach(btn => {
-      btn.classList.remove('speaking');
-    });
-  };
-  speechSynthesis.speak(u);
+
+  // 修復7：voices 為空時先等待載入再播放（最多等 2 秒）
+  if (voicesCache.length === 0) {
+    let waited = 0;
+    const waitForVoices = setInterval(() => {
+      loadVoices();
+      waited += 100;
+      if (voicesCache.length > 0 || waited >= 2000) {
+        clearInterval(waitForVoices);
+        doSpeak();
+      }
+    }, 100);
+  } else {
+    // 修復2（續）：cancel 後延遲 80ms 再 speak
+    setTimeout(doSpeak, 80);
+  }
 }
 
-// 朗讀例句（語速稍慢）
+/* ── 朗讀例句（語速稍慢） ── */
 function speakSentence(text) {
   speak(text, Math.min(_ttsRate, 0.75));
 }
@@ -2499,7 +2588,8 @@ function renderLearnCard() {
       saveState();
     });
   }, 50);
-  speak(w.word);
+  // Android 修復：延遲 400ms 再播放，確保頁面動畫完成且 TTS 已解鎖
+  setTimeout(() => speak(w.word), 400);
 }
 
 function topicEmoji(topic) {
@@ -2604,7 +2694,11 @@ function renderListen() {
   const letters = w.word.split('');
   $('#listen-chips').innerHTML = letters.map(() => `<span class="letter-chip">?</span>`).join('');
   updatePracticeProgress();
-  setTimeout(() => speak(w.word), 250);
+  // Android 修復：延遲加長到 600ms，確保頁面渲染完成且 TTS 已解鎖
+  setTimeout(() => {
+    unlockTTS();
+    speak(w.word);
+  }, 600);
 }
 function submitListen() {
   const w = practiceQueue[practiceIdx];
@@ -3123,9 +3217,9 @@ function renderFlashcard() {
     if (card) card.addEventListener('click', () => card.classList.toggle('flipped'));
     $('#fc-next', root).addEventListener('click', () => { fcIdx++; closeModal(); renderFlashcard(); });
     $('#fc-prev', root).addEventListener('click', () => { if (fcIdx > 0) { fcIdx--; closeModal(); renderFlashcard(); } });
-    $('#fc-speak', root).addEventListener('click', () => speak(w.word));
-    // 自動朗讀
-    setTimeout(() => speak(w.word), 300);
+    $('#fc-speak', root).addEventListener('click', () => { unlockTTS(); speak(w.word); });
+    // 自動朗讀（Android 修復：延遲加長到 700ms）
+    setTimeout(() => { unlockTTS(); speak(w.word); }, 700);
   });
 }
 
@@ -4029,10 +4123,10 @@ function bindEvents() {
   // 聽力拼寫 Tab
   const listenPlayBtn = $('#listen-play-btn');
   if (listenPlayBtn) listenPlayBtn.addEventListener('click', () => {
+    unlockTTS(); // 確保 Android 已解鎖
     const w = practiceQueue[practiceIdx];
     if (w) speak(w.word);
-    listenPlayBtn.classList.add('speaking');
-    setTimeout(() => listenPlayBtn.classList.remove('speaking'), 700);
+    // 不手動加 speaking class，由 TTS onstart/onend 統一管理
   });
   const listenSubmitBtn = $('#listen-submit');
   if (listenSubmitBtn) listenSubmitBtn.addEventListener('click', submitListen);
@@ -4105,9 +4199,11 @@ function bindEvents() {
   const btnCloudSync = $('#btn-cloud-sync');
   if (btnCloudSync) btnCloudSync.addEventListener('click', () => { if (window.PetSync) window.PetSync.showAuthModal(); });
 
-  // ===== Android 音頻解鎖：首次任意觸摸即解鎖 TTS =====
-  document.addEventListener('touchstart', unlockTTS, { once: true, passive: true });
-  document.addEventListener('mousedown', unlockTTS, { once: true });
+  // ===== Android 音頻解鎖：每次觸摸都呼叫，確保 Android 不會因頁面切換而重置 =====
+  document.addEventListener('touchstart', unlockTTS, { passive: true });
+  document.addEventListener('mousedown', unlockTTS);
+  // 首次點擊任何按鈕時也解鎖
+  document.addEventListener('click', unlockTTS, { once: true });
 
   // ===== 全局鍵盤快捷鍵 =====
   document.addEventListener('keydown', function(e) {
