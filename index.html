@@ -2011,11 +2011,15 @@ let _ttsRate = 0.85;
 let _ttsUnlocked = false;
 let _ttsWatchdog = null;
 let _currentAudio = null;   // 用於 Audio 元素播放方案
+let _isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+let _isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+let _iosVoicesReady = false; // iOS voices 需要延遲載入
 
 /* ================================================================
- * TTS 層級方案：
- *  1. Google TTS URL + Audio 元素（主方案，Android 完全支持）
- *  2. Web Speech API（備用，桁面瀏覽器優先）
+ * TTS 層級方案（全裝置相容）：
+ *  1. iOS Safari / Chrome for iOS  → Web Speech API（iOS 內建，音質最佳）
+ *  2. Android / 其他行動裝置     → Google TTS Audio 元素（主方案）
+ *  3. 桁面瀏覽器              → Google TTS Audio 元素，失敗則降級到 Web Speech API
  * ================================================================ */
 
 /* ── 輔助：更新按鈕動畫狀態 ── */
@@ -2026,68 +2030,66 @@ function _setSpeakingUI(on) {
   });
 }
 
-/* ── 方案 1：Google TTS URL （主方案） ── */
-function _speakViaAudio(text, rate) {
-  // 停止上一個音頻
-  if (_currentAudio) {
-    try { _currentAudio.pause(); _currentAudio.src = ''; } catch(e) {}
-    _currentAudio = null;
-  }
-  if (_ttsWatchdog) { clearTimeout(_ttsWatchdog); _ttsWatchdog = null; }
-
-  const tl = _ttsLang.split('-')[0]; // 'en'
-  // Google Translate TTS 無需 API Key，直接返回 MP3
-  const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${tl}&client=tw-ob&ttsspeed=${rate || _ttsRate}`;
-
-  const audio = new Audio();
-  audio.crossOrigin = 'anonymous';
-  _currentAudio = audio;
-
-  audio.onplay = () => { _setSpeakingUI(true); };
-  audio.onended = () => { _setSpeakingUI(false); _currentAudio = null; };
-  audio.onerror = () => {
-    _setSpeakingUI(false);
-    _currentAudio = null;
-    // Google TTS 失敗，降級到 Web Speech API
-    console.warn('[TTS] Google TTS 失敗，嘗試 Web Speech API');
-    _speakViaSpeechAPI(text, rate);
-  };
-
-  audio.src = url;
-  const playPromise = audio.play();
-  if (playPromise) {
-    playPromise.catch(err => {
-      _setSpeakingUI(false);
-      _currentAudio = null;
-      console.warn('[TTS] Audio.play() 失敗:', err.message);
-      // 如果是用戶手勢問題，提示用戶點擊播放鍵
-      if (err.name === 'NotAllowedError') {
-        showToast('請點擊播放鍵才能播放語音 🔊');
-      } else {
-        // 其他錯誤降級到 Web Speech API
-        _speakViaSpeechAPI(text, rate);
-      }
-    });
+/* ── iOS 語音列表載入（iOS 需要延遲且必須在用戶手勢後載入） ── */
+function loadVoices() {
+  if (!('speechSynthesis' in window)) return;
+  const v = speechSynthesis.getVoices();
+  if (v.length > 0) {
+    const en = v.filter(x => x.lang.startsWith('en'));
+    voicesCache = en.length > 0 ? en : v;
+    _iosVoicesReady = true;
   }
 }
+if ('speechSynthesis' in window) {
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+  // iOS 和 Android 有時不觸發 onvoiceschanged，輪詢兜底
+  let _vp = 0;
+  const _vpoll = setInterval(() => {
+    loadVoices();
+    if (voicesCache.length > 0 || ++_vp > 30) clearInterval(_vpoll);
+  }, 500);
+}
 
-/* ── 方案 2：Web Speech API（備用） ── */
+/* ── 選擇最佳語音 ── */
+function pickBestVoice(lang) {
+  if (voicesCache.length === 0) return null;
+  const base = lang.split('-')[0];
+  const pool = voicesCache.filter(v => v.lang.startsWith(base));
+  const exact = pool.filter(v => v.lang === lang);
+  // iOS 内建語音標記為 Siri/Enhanced/Premium
+  for (const q of ['siri','neural','premium','enhanced','natural','google']) {
+    const f = exact.find(v => v.name.toLowerCase().includes(q)) || pool.find(v => v.name.toLowerCase().includes(q));
+    if (f) return f;
+  }
+  return exact[0] || pool[0] || voicesCache[0] || null;
+}
+
+/* ── iOS 專用：Web Speech API 播放（iOS 內建 TTS 音質最佳） ── */
 function _speakViaSpeechAPI(text, rate) {
-  if (!('speechSynthesis' in window)) return;
-  try { speechSynthesis.resume(); } catch(e) {}
+  if (!('speechSynthesis' in window)) {
+    // iOS 的 Chrome for iOS 也是 WebKit，應該有 speechSynthesis
+    console.warn('[TTS] 此裝置不支持 Web Speech API');
+    return;
+  }
+  // iOS 修復：先 cancel 再延遲 speak（防止語音列表未就緒就播放）
   try { speechSynthesis.cancel(); } catch(e) {}
   if (_ttsWatchdog) { clearTimeout(_ttsWatchdog); _ttsWatchdog = null; }
 
+  // iOS 修復：延遲 150ms（小於此時間 iOS voices 可能未就緒）
+  const delay = _iosVoicesReady ? 100 : 500;
   setTimeout(() => {
     try {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = _ttsLang;
       u.rate = rate || _ttsRate;
+      // iOS 修復：不強制設置 voice，讓 iOS 自動選擇系統默認語音
       const v = pickBestVoice(_ttsLang);
       if (v) u.voice = v;
 
       u.onstart = () => {
         _setSpeakingUI(true);
+        // iOS 修復：watchdog 防止卡死
         _ttsWatchdog = setTimeout(() => {
           try { speechSynthesis.cancel(); } catch(e) {}
           _setSpeakingUI(false);
@@ -2100,51 +2102,89 @@ function _speakViaSpeechAPI(text, rate) {
       u.onend = onDone;
       u.onerror = (e) => {
         onDone();
-        if (e.error === 'not-allowed') showToast('請先點擊頁面任意位置，再試一次 🔊');
+        if (e.error === 'not-allowed') {
+          // iOS PWA 限制：提示用戶
+          if (_isPWA) {
+            showToast('請先點擊任意位置解鎖音頻 🔊');
+          } else {
+            showToast('請先點擊頁面任意位置，再試一次 🔊');
+          }
+        } else if (e.error === 'synthesis-failed') {
+          // iOS 對特殊字符會失敗，清理後重試
+          const clean = text.replace(/[^ -]/g, ' ').trim();
+          if (clean && clean !== text) {
+            setTimeout(() => _speakViaSpeechAPI(clean, rate), 200);
+          }
+        }
       };
+
       speechSynthesis.speak(u);
-      setTimeout(() => { if (speechSynthesis.paused) { try { speechSynthesis.resume(); } catch(e) {} } }, 200);
+
+      // iOS 修復：speak 後立即檢查是否在播放中，若卡在 paused 則 resume
+      setTimeout(() => {
+        if (speechSynthesis.paused) {
+          try { speechSynthesis.resume(); } catch(e) {}
+        }
+        // iOS 修復：若 speaking 為 false 且沒有語音，表示失敗，降級到 Audio 元素
+        if (!speechSynthesis.speaking && !speechSynthesis.pending) {
+          // 已結束或從未開始，不做額外處理
+        }
+      }, 300);
     } catch(err) {
       console.error('[TTS] Web Speech API 失敗:', err);
+      // iOS 失敗則嘗試 Google TTS
+      if (_isIOS) _speakViaAudio(text, rate);
     }
-  }, 80);
+  }, delay);
 }
 
-/* ── 語音列表載入（備用方案用） ── */
-function loadVoices() {
-  if (!('speechSynthesis' in window)) return;
-  const v = speechSynthesis.getVoices();
-  if (v.length > 0) {
-    const en = v.filter(x => x.lang.startsWith('en'));
-    voicesCache = en.length > 0 ? en : v;
+/* ── Android / 桁面方案：Google TTS Audio 元素 ── */
+function _speakViaAudio(text, rate) {
+  if (_currentAudio) {
+    try { _currentAudio.pause(); _currentAudio.src = ''; } catch(e) {}
+    _currentAudio = null;
+  }
+  if (_ttsWatchdog) { clearTimeout(_ttsWatchdog); _ttsWatchdog = null; }
+
+  const tl = _ttsLang.split('-')[0];
+  const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${tl}&client=tw-ob&ttsspeed=${rate || _ttsRate}`;
+
+  const audio = new Audio();
+  // iOS 修復：不設置 crossOrigin，避免 iOS Safari CORS 問題
+  if (!_isIOS) audio.crossOrigin = 'anonymous';
+  _currentAudio = audio;
+
+  audio.onplay = () => { _setSpeakingUI(true); };
+  audio.onended = () => { _setSpeakingUI(false); _currentAudio = null; };
+  audio.onerror = () => {
+    _setSpeakingUI(false);
+    _currentAudio = null;
+    console.warn('[TTS] Google TTS 失敗，嘗試 Web Speech API');
+    _speakViaSpeechAPI(text, rate);
+  };
+
+  audio.src = url;
+  const playPromise = audio.play();
+  if (playPromise) {
+    playPromise.catch(err => {
+      _setSpeakingUI(false);
+      _currentAudio = null;
+      console.warn('[TTS] Audio.play() 失敗:', err.message);
+      if (err.name === 'NotAllowedError') {
+        // iOS/Android 自動播放政策問題→ 降級到 Web Speech API
+        _speakViaSpeechAPI(text, rate);
+      } else {
+        _speakViaSpeechAPI(text, rate);
+      }
+    });
   }
 }
-if ('speechSynthesis' in window) {
-  loadVoices();
-  speechSynthesis.onvoiceschanged = loadVoices;
-  let _vp = 0;
-  const _vpoll = setInterval(() => { loadVoices(); if (voicesCache.length > 0 || ++_vp > 20) clearInterval(_vpoll); }, 500);
-}
 
-/* ── 選擇最佳語音（備用方案用） ── */
-function pickBestVoice(lang) {
-  if (voicesCache.length === 0) return null;
-  const base = lang.split('-')[0];
-  const pool = voicesCache.filter(v => v.lang.startsWith(base));
-  const exact = pool.filter(v => v.lang === lang);
-  for (const q of ['neural','premium','enhanced','natural','google']) {
-    const f = exact.find(v => v.name.toLowerCase().includes(q)) || pool.find(v => v.name.toLowerCase().includes(q));
-    if (f) return f;
-  }
-  return exact[0] || pool[0] || voicesCache[0] || null;
-}
-
-/* ── 解鎖 Android 音頻（每次用戶手勢都呼叫） ── */
+/* ── 解鎖音頻（每次用戶手勢都呼叫） ── */
 function unlockTTS() {
-  // 解鎖 Audio Context（給 Audio 元素方案用）
   if (!_ttsUnlocked) {
     _ttsUnlocked = true;
-    // 播放一段無聲短音頻解鎖 AudioContext
+    // 解鎖 AudioContext
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const buf = ctx.createBuffer(1, 1, 22050);
@@ -2154,7 +2194,7 @@ function unlockTTS() {
       src.start(0);
       setTimeout(() => ctx.close(), 500);
     } catch(e) {}
-    // 同時解鎖 Web Speech API
+    // 解鎖 Web Speech API
     if ('speechSynthesis' in window) {
       try { speechSynthesis.resume(); } catch(e) {}
       try {
@@ -2162,16 +2202,43 @@ function unlockTTS() {
         u.volume = 0; u.rate = 2;
         u.onend = () => {}; u.onerror = () => {};
         speechSynthesis.speak(u);
+        // iOS 修復：解鎖後重新載入語音列表
+        setTimeout(loadVoices, 200);
       } catch(e) {}
+    }
+  } else if (_isIOS) {
+    // iOS 修復：每次手勢都確保不在 paused 狀態
+    if ('speechSynthesis' in window) {
+      try { speechSynthesis.resume(); } catch(e) {}
     }
   }
 }
 
+/* ── iOS 後台切回修復：頁面重新可見時自動恢復 TTS 狀態 ── */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && _isIOS) {
+    // iOS 修復：從背景切回時，重置已卡死的 speechSynthesis
+    if ('speechSynthesis' in window) {
+      try {
+        speechSynthesis.cancel();
+        speechSynthesis.resume();
+      } catch(e) {}
+    }
+    // 重新載入語音列表（iOS 從背景切回後 voices 可能清空）
+    setTimeout(loadVoices, 300);
+  }
+});
+
 /* ── 公開 speak 函數（自動選擇最佳方案） ── */
 function speak(text, rate) {
   if (!text) return;
-  // 主方案：Google TTS Audio 元素（Android 完全支持）
-  _speakViaAudio(text, rate);
+  if (_isIOS) {
+    // iOS 優先用內建 Web Speech API（音質最佳，且不需網路）
+    _speakViaSpeechAPI(text, rate);
+  } else {
+    // Android / 桁面：用 Google TTS Audio 元素
+    _speakViaAudio(text, rate);
+  }
 }
 
 /* ── 朗讀例句（語速稍慢） ── */
