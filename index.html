@@ -2015,6 +2015,9 @@ let _isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 let _isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 let _iosVoicesReady = false; // iOS voices 需要延遲載入
 
+// 靜態 MP3 基礎路徑
+const AUDIO_BASE = './audio/';
+
 /* ================================================================
  * TTS 層級方案（全裝置相容）：
  *  1. iOS Safari / Chrome for iOS  → Web Speech API（iOS 內建，音質最佳）
@@ -2229,21 +2232,79 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-/* ── 公開 speak 函數（自動選擇最佳方案） ── */
-function speak(text, rate) {
-  if (!text) return;
+/* ── 單字轉檔名（與下載腳本一致） ── */
+function _wordToFilename(word) {
+  return word.toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/\//g, '_')
+    .replace(/'/g, '')
+    .replace(/-/g, '_') + '.mp3';
+}
+
+/* ── 主方案：靜態 MP3（所有裝置都支持） ── */
+function _speakViaStaticMP3(text, rate) {
+  // 停止上一個音頻
+  if (_currentAudio) {
+    try { _currentAudio.pause(); _currentAudio.src = ''; } catch(e) {}
+    _currentAudio = null;
+  }
+  if (_ttsWatchdog) { clearTimeout(_ttsWatchdog); _ttsWatchdog = null; }
+
+  const filename = _wordToFilename(text);
+  const url = AUDIO_BASE + filename;
+
+  const audio = new Audio(url);
+  // 調整播放速度（限制在 0.5x ~ 2x）
+  const playbackRate = Math.min(Math.max(rate || _ttsRate, 0.5), 2.0);
+  audio.playbackRate = playbackRate;
+  _currentAudio = audio;
+
+  audio.onplay = () => { _setSpeakingUI(true); };
+  audio.onended = () => { _setSpeakingUI(false); _currentAudio = null; };
+  audio.onerror = () => {
+    _setSpeakingUI(false);
+    _currentAudio = null;
+    // 靜態 MP3 失敗（檔案不存在），降級到線上 TTS
+    console.warn('[TTS] 靜態 MP3 不存在:', filename, '，降級到線上 TTS');
+    _speakViaOnlineFallback(text, rate);
+  };
+
+  const playPromise = audio.play();
+  if (playPromise) {
+    playPromise.catch(err => {
+      _setSpeakingUI(false);
+      _currentAudio = null;
+      if (err.name === 'NotAllowedError') {
+        // 需要用戶手勢，提示用戶
+        showToast('請點擊播放鍵才能播放語音 🔊');
+      } else {
+        // 其他錯誤降級到線上 TTS
+        _speakViaOnlineFallback(text, rate);
+      }
+    });
+  }
+}
+
+/* ── 備用方案：線上 TTS（靜態 MP3 不存在時使用） ── */
+function _speakViaOnlineFallback(text, rate) {
   if (_isIOS) {
-    // iOS 優先用內建 Web Speech API（音質最佳，且不需網路）
     _speakViaSpeechAPI(text, rate);
   } else {
-    // Android / 桁面：用 Google TTS Audio 元素
     _speakViaAudio(text, rate);
   }
 }
 
+/* ── 公開 speak 函數（主方案：靜態 MP3） ── */
+function speak(text, rate) {
+  if (!text) return;
+  // 主方案：靜態 MP3（所有裝置都支持，不需網路權限）
+  _speakViaStaticMP3(text, rate);
+}
+
 /* ── 朗讀例句（語速稍慢） ── */
 function speakSentence(text) {
-  speak(text, Math.min(_ttsRate, 0.75));
+  // 例句不是單一單字，無靜態 MP3，直接用線上 TTS
+  _speakViaOnlineFallback(text, Math.min(_ttsRate, 0.75));
 }
 
 /* =====================================================================
