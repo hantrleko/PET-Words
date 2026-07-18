@@ -44,8 +44,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
-  <!-- ===== Tailwind CSS (CDN) — 多镜像容灾 ===== -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- ===== Tailwind CSS (靜態預編譯，無 JS 運行時，完全相容所有瀏覽器) ===== -->
+  <link rel="stylesheet" href="css/tailwind.min.css" />
   <!-- ===== Font Awesome 图标 — jsdelivr + bootcdn 双源 ===== -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"
         onerror="this.onerror=null;this.href='https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css'">
@@ -619,27 +619,7 @@
   }
   </style>
 
-  <script>
-    // Tailwind 主题扩展（配色与方案第5节一致）
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            sky:   { DEFAULT: '#4FC3F7' },
-            grass: { DEFAULT: '#81C784' },
-            sun:   { DEFAULT: '#FFD54F' },
-            coral: { DEFAULT: '#FF8A65' },
-            ink:   { DEFAULT: '#1f2937' },
-            paper: { DEFAULT: '#fffdf7' },
-            soft:  { DEFAULT: '#f3f8fc' },
-          },
-          fontFamily: {
-            kid: ['Baloo 2', 'Inter', 'system-ui', 'sans-serif'],
-          }
-        }
-      }
-    }
-  </script>
+  <!-- Tailwind 自定義顏色已內嵌在靜態 CSS 中，無需 tailwind.config 腳本 -->
 </head>
 
 <body class="font-kid">
