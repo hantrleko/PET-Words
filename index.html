@@ -2164,7 +2164,7 @@ function _speakViaSpeechAPI(text, rate) {
           }
         } else if (e.error === 'synthesis-failed') {
           // iOS 對特殊字符會失敗，清理後重試
-          const clean = text.replace(/[^ -]/g, ' ').trim();
+          const clean = text.replace(/[\u0080-\uFFFF]/g, ' ').trim();
           if (clean && clean !== text) {
             setTimeout(() => _speakViaSpeechAPI(clean, rate), 200);
           }
