@@ -14,6 +14,29 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <title>PET Kids · 40天单词挑战</title>
 
+  <!-- ===== 強制清除舊 Service Worker 快取（版本升級時使用）===== -->
+  <script>
+  // 當 SW 版本更新時，強制讓舊 SW 立即激活並清除舊快取
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(regs) {
+      regs.forEach(function(reg) {
+        // 如果有等待中的新 SW，立即激活
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+      });
+    });
+    // 監聽 SW 控制器變更，自動重載頁面以載入最新版本
+    navigator.serviceWorker.addEventListener('controllerchange', function() {
+      if (!window._swReloading) {
+        window._swReloading = true;
+        console.log('[PET] New SW activated, reloading for latest version...');
+        window.location.reload();
+      }
+    });
+  }
+  </script>
+
   <!-- ===== Preconnect: warm up CDN connections ===== -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://cdn.bootcdn.net" crossorigin />
@@ -620,6 +643,53 @@
 </head>
 
 <body class="font-kid">
+
+  <!-- ========== 可視化錯誤診斷框（調試用，確認正常後可移除）========== -->
+  <div id="debug-error-box" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#ff4444;color:#fff;padding:12px 16px;font-size:13px;font-family:monospace;max-height:50vh;overflow-y:auto;">
+    <strong>頁面錯誤（請截圖發給開發者）:</strong>
+    <div id="debug-error-list"></div>
+    <button onclick="document.getElementById('debug-error-box').style.display='none'" style="margin-top:8px;background:rgba(255,255,255,0.3);border:none;color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;">關閉</button>
+  </div>
+  <script>
+  (function() {
+    var errors = [];
+    function showDebugError(msg) {
+      errors.push(msg);
+      var box = document.getElementById('debug-error-box');
+      var list = document.getElementById('debug-error-list');
+      if (box && list) {
+        box.style.display = 'block';
+        list.innerHTML = errors.map(function(e) { return '<div style="margin-top:4px;border-top:1px solid rgba(255,255,255,0.3);padding-top:4px;">' + e + '</div>'; }).join('');
+      }
+    }
+    window.addEventListener('error', function(e) {
+      showDebugError('❌ ' + e.message + ' (' + (e.filename || '').split('/').pop() + ':' + e.lineno + ')');
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      showDebugError('⚠️ Promise錯誤: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
+    });
+    // 在 5 秒後檢查頁面是否正常初始化
+    setTimeout(function() {
+      var nav = document.getElementById('nav-bar');
+      var home = document.getElementById('page-home');
+      if (!nav || !home) {
+        showDebugError('❌ DOM 結構缺失：nav-bar=' + !!nav + ', page-home=' + !!home);
+        return;
+      }
+      // 檢查按鈕是否有事件監聽器
+      var navBtns = nav.querySelectorAll('.nav-item');
+      if (navBtns.length === 0) {
+        showDebugError('❌ 導航按鈕數量為 0，bindEvents 可能未執行');
+      } else {
+        console.log('[PET Debug] 頁面初始化正常，導航按鈕數量: ' + navBtns.length);
+      }
+      // 檢查 vocab 是否已載入
+      if (!window.PET_VOCAB || window.PET_VOCAB.length < 100) {
+        showDebugError('❌ PET_VOCAB 未就緒，字數: ' + (window.PET_VOCAB ? window.PET_VOCAB.length : 0));
+      }
+    }, 5000);
+  })();
+  </script>
 
   <!-- ========== PWA 更新提示橫幅 ========== -->
   <div id="pwa-update-banner" class="hidden">
