@@ -624,52 +624,7 @@
 
 <body class="font-kid">
 
-  <!-- ========== 可視化錯誤診斷框（調試用，確認正常後可移除）========== -->
-  <div id="debug-error-box" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#ff4444;color:#fff;padding:12px 16px;font-size:13px;font-family:monospace;max-height:50vh;overflow-y:auto;">
-    <strong>頁面錯誤（請截圖發給開發者）:</strong>
-    <div id="debug-error-list"></div>
-    <button onclick="document.getElementById('debug-error-box').style.display='none'" style="margin-top:8px;background:rgba(255,255,255,0.3);border:none;color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;">關閉</button>
-  </div>
-  <script>
-  (function() {
-    var errors = [];
-    function showDebugError(msg) {
-      errors.push(msg);
-      var box = document.getElementById('debug-error-box');
-      var list = document.getElementById('debug-error-list');
-      if (box && list) {
-        box.style.display = 'block';
-        list.innerHTML = errors.map(function(e) { return '<div style="margin-top:4px;border-top:1px solid rgba(255,255,255,0.3);padding-top:4px;">' + e + '</div>'; }).join('');
-      }
-    }
-    window.addEventListener('error', function(e) {
-      showDebugError('❌ ' + e.message + ' (' + (e.filename || '').split('/').pop() + ':' + e.lineno + ')');
-    });
-    window.addEventListener('unhandledrejection', function(e) {
-      showDebugError('⚠️ Promise錯誤: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
-    });
-    // 在 5 秒後檢查頁面是否正常初始化
-    setTimeout(function() {
-      var nav = document.getElementById('nav-bar');
-      var home = document.getElementById('page-home');
-      if (!nav || !home) {
-        showDebugError('❌ DOM 結構缺失：nav-bar=' + !!nav + ', page-home=' + !!home);
-        return;
-      }
-      // 檢查按鈕是否有事件監聽器
-      var navBtns = nav.querySelectorAll('.nav-item');
-      if (navBtns.length === 0) {
-        showDebugError('❌ 導航按鈕數量為 0，bindEvents 可能未執行');
-      } else {
-        console.log('[PET Debug] 頁面初始化正常，導航按鈕數量: ' + navBtns.length);
-      }
-      // 檢查 vocab 是否已載入
-      if (!window.PET_VOCAB || window.PET_VOCAB.length < 100) {
-        showDebugError('❌ PET_VOCAB 未就緒，字數: ' + (window.PET_VOCAB ? window.PET_VOCAB.length : 0));
-      }
-    }, 5000);
-  })();
-  </script>
+
 
   <!-- ========== PWA 更新提示橫幅 ========== -->
   <div id="pwa-update-banner" class="hidden">
@@ -2351,10 +2306,54 @@ function speak(text, rate) {
   _speakViaStaticMP3(text, rate);
 }
 
-/* ── 朗讀例句（語速稍慢） ── */
+/* ── 例句文字轉安全文件名（與 download_sentences.py 邏輯一致） ── */
+function _sentenceToFilename(text) {
+  let s = text.toLowerCase();
+  s = s.replace(/[^a-z0-9]+/g, '_');
+  s = s.replace(/^_+|_+$/g, '');
+  return s.substring(0, 50) + '.mp3';
+}
+
+/* ── 朗讀例句（主方案：靜態 MP3，備用：線上 TTS） ── */
 function speakSentence(text) {
-  // 例句不是單一單字，無靜態 MP3，直接用線上 TTS
-  _speakViaOnlineFallback(text, Math.min(_ttsRate, 0.75));
+  if (!text) return;
+  // 停止上一個音頻
+  if (_currentAudio) {
+    try { _currentAudio.pause(); _currentAudio.src = ''; } catch(e) {}
+    _currentAudio = null;
+  }
+  if (_ttsWatchdog) { clearTimeout(_ttsWatchdog); _ttsWatchdog = null; }
+
+  const filename = _sentenceToFilename(text);
+  const url = './audio/sentences/' + filename;
+  const rate = Math.min(_ttsRate, 0.75);
+
+  const audio = new Audio(url);
+  audio.playbackRate = Math.min(Math.max(rate, 0.5), 2.0);
+  _currentAudio = audio;
+
+  audio.onplay = () => { _setSpeakingUI(true); };
+  audio.onended = () => { _setSpeakingUI(false); _currentAudio = null; };
+  audio.onerror = () => {
+    _setSpeakingUI(false);
+    _currentAudio = null;
+    // 靜態 MP3 不存在，降級到線上 TTS
+    console.warn('[TTS] 例句靜態 MP3 不存在:', filename, '，降級到線上 TTS');
+    _speakViaOnlineFallback(text, rate);
+  };
+
+  const playPromise = audio.play();
+  if (playPromise) {
+    playPromise.catch(err => {
+      _setSpeakingUI(false);
+      _currentAudio = null;
+      if (err.name === 'NotAllowedError') {
+        showToast('請點擊播放鍵才能播放語音 🔊');
+      } else {
+        _speakViaOnlineFallback(text, rate);
+      }
+    });
+  }
 }
 
 /* =====================================================================

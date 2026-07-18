@@ -4,7 +4,7 @@
  * 策略：Network First（核心頁面）+ Cache First（音頻/圖片靜態資源）
  * ===================================================================== */
 
-const CACHE_NAME = 'pet-kids-20260718';
+const CACHE_NAME = 'pet-kids-20260718b';
 const OFFLINE_URL = '/PET-Words/';
 
 // 預快取的核心靜態資源（只快取最關鍵的，音頻按需快取）
@@ -18,7 +18,7 @@ const PRECACHE_URLS = [
 
 // ===== Install：預快取核心資源 =====
 self.addEventListener('install', event => {
-  console.log('[SW] Installing v20260718...');
+  console.log('[SW] Installing v20260718b (sentence MP3s)...');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
@@ -38,7 +38,7 @@ self.addEventListener('install', event => {
 
 // ===== Activate：清理所有舊快取 =====
 self.addEventListener('activate', event => {
-  console.log('[SW] Activating v20260718...');
+  console.log('[SW] Activating v20260718b...');
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
