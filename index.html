@@ -1971,6 +1971,7 @@ function markDayComplete(day, stars) {
 
 function advanceDayIfNeeded() {
   const today = todayStr();
+  // 更新連續打卡天數（仍保留日期追蹤，用於 streak 計算）
   if (appState.lastActiveDate !== today) {
     if (appState.lastActiveDate) {
       const last = new Date(appState.lastActiveDate);
@@ -1981,9 +1982,11 @@ function advanceDayIfNeeded() {
       appState.streak = 1;
     }
     appState.lastActiveDate = today;
-    if (appState.currentDay < TOTAL_DAYS && dayCompleted(appState.currentDay)) {
-      appState.currentDay += 1;
-    }
+    saveState();
+  }
+  // 無時間限制：只要當天已完成，立即解鎖下一天（不需等到隔天）
+  if (appState.currentDay < TOTAL_DAYS && dayCompleted(appState.currentDay)) {
+    appState.currentDay += 1;
     saveState();
   }
 }
@@ -2803,9 +2806,18 @@ function learnNext() {
     const stars = 20;
     addStars(stars);
     rec.stars = (rec.stars || 0) + stars;
+    // 學完單字立即標記当天完成，解鎖下一天（無需等到隔天）
+    if (!rec.completed) {
+      rec.completed = true;
+      appState.dailyRecords[day] = rec;
+    }
     saveState();
+    // 立即推進天數
+    advanceDayIfNeeded();
     updateLearnTodayBanner();
-    showResultModal('今日单词学完啦！', `<p>你学习了 ${learnQueue.length} 个新词</p><p>去练习中心巩固一下吧！</p>`, { stars, onOk: () => showPage('practice') });
+    const nextDay = appState.currentDay;
+    const hasMore = nextDay <= TOTAL_DAYS && nextDay > day;
+    showResultModal('今日单词学完啦！', `<p>你学习了 ${learnQueue.length} 个新词</p>${hasMore ? `<p class="text-sky font-bold">第 ${nextDay} 天已解锁！可以继续学习或先去练习巹固。</p>` : '<p>去练习中心巹固一下吧！</p>'}`, { stars, onOk: () => showPage('practice') });
   }
 }
 
@@ -3128,6 +3140,8 @@ function finishPractice() {
     rec.completed = true;
   }
   saveState();
+  // 練習完成後也立即推進天數（無需等到隔天）
+  advanceDayIfNeeded();
   checkBadges();
   // 計算本輪統計
   const totalAcc = sessionStats.total > 0 ? Math.round(sessionStats.correct / sessionStats.total * 100) : 0;
@@ -3864,8 +3878,9 @@ function renderPlan() {
 }
 
 function goToDay(day) {
-  if (day > appState.currentDay) {
-    showResultModal('这一天还没解锁', '<p>请按顺序学习，先把前面的内容完成吧～</p>', { mascot: '🦊' });
+  // 無時間限制：只要前一天已完成（或為第 1 天），就可以進入任意天
+  if (day > 1 && !dayCompleted(day - 1) && day > appState.currentDay) {
+    showResultModal('这一天还没解锁', '<p>请先完成第 ' + (day - 1) + ' 天的学习，就能解锁这一天～</p>', { mascot: '🦊' });
     return;
   }
   appState.currentDay = day;
