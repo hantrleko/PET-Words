@@ -1743,19 +1743,62 @@ const TEST_STAGE_Q = 20;
 const TEST_FINAL_Q = 40;
 
 const BADGES = [
-  { id: 'first_step',   icon: '🐾', name: '入门先锋',  desc: '完成第1天学习',      check: s => s.currentDay >= 1 && dayCompleted(1) },
-  { id: 'streak_10',    icon: '🔥', name: '10天坚持',  desc: '连续打卡10天',      check: s => s.streak >= 10 },
-  { id: 'streak_40',    icon: '🏆', name: '40天冠军',  desc: '完成40天挑战',      check: s => s.currentDay >= 40 },
-  { id: 'spelling_200', icon: '⌨️', name: '拼写之星',  desc: '累计拼写正确200次', check: s => s.stats.spellingCorrect >= 200 },
-  { id: 'stars_500',    icon: '⭐', name: '星星收集者', desc: '累计获得500星星',   check: s => s.totalStars >= 500 },
-  { id: 'stars_2000',   icon: '🌟', name: '星星大师',  desc: '累计获得2000星星',  check: s => s.totalStars >= 2000 },
-  { id: 'master_half',  icon: '📖', name: '小书虫',    desc: '掌握50%单词',       check: s => masteredCount() >= totalVocab() * 0.5 },
-  { id: 'master_all',   icon: '🎓', name: '词汇大师',  desc: '掌握全部单词',      check: s => masteredCount() >= totalVocab() },
-  { id: 'test_perfect', icon: '💯', name: '满分选手',  desc: '任一测试得满分',    check: s => s.stats.testPerfectCount >= 1 },
-  { id: 'wrong_clear',  icon: '🧹', name: '错题清零',  desc: '错题本清空',        check: s => s.wrongWords.length === 0 && s.stats.spellingCorrect > 0 },
-  { id: 'collector_20', icon: '💎', name: '收藏达人',  desc: '收藏20个单词',      check: s => (s.favorites || []).length >= 20 },
-  { id: 'listen_100',   icon: '🎧', name: '耳聪目明',  desc: '听力练习正确100次', check: s => (s.stats.listenCorrect || 0) >= 100 },
-  { id: 'rank_scholar', icon: '👑', name: '词汇学者',  desc: '晋升为「词汇学者」称号', check: s => rankOf(s.totalStars).idx >= 4 },
+  // ── 學習進度 ──
+  { id: 'first_step',    icon: '🐾', name: '入门先锋',   desc: '完成第1天学习',        check: s => s.currentDay >= 1 && dayCompleted(1) },
+  { id: 'day_5',         icon: '🌱', name: '小树新芽',   desc: '完成第5天学习',        check: s => dayCompleted(5) },
+  { id: 'day_10',        icon: '🌳', name: '成长之树',   desc: '完成第10天学习',       check: s => dayCompleted(10) },
+  { id: 'day_20',        icon: '🌲', name: '山峰远望',   desc: '完成第20天学习',       check: s => dayCompleted(20) },
+  { id: 'day_30',        icon: '🌊', name: '学习海洋',   desc: '完成第30天学习',       check: s => dayCompleted(30) },
+  { id: 'streak_40',     icon: '🏆', name: '40天冠军',  desc: '完成全部40天挑戰',      check: s => dayCompleted(40) },
+
+  // ── 連續打卡 ──
+  { id: 'streak_3',      icon: '💧', name: '点火苗头',   desc: '連續打卡 3 天',         check: s => s.streak >= 3 },
+  { id: 'streak_7',      icon: '🔥', name: '一周坚持',   desc: '連續打卡 7 天',         check: s => s.streak >= 7 },
+  { id: 'streak_10',     icon: '❤️‍🔥', name: '10天坚持',  desc: '連續打卡 10 天',        check: s => s.streak >= 10 },
+  { id: 'streak_30',     icon: '🌠', name: '恒星之光',   desc: '連續打卡 30 天',        check: s => s.streak >= 30 },
+
+  // ── 字彙掌握 ──
+  { id: 'master_100',    icon: '📘', name: '百词新生',   desc: '掌握 100 个单词',         check: s => masteredCount() >= 100 },
+  { id: 'master_half',   icon: '📖', name: '小书虫',    desc: '掌握 50% 单词',           check: s => masteredCount() >= totalVocab() * 0.5 },
+  { id: 'master_all',    icon: '🎓', name: '词汇大师',  desc: '掌握全部单词',          check: s => masteredCount() >= totalVocab() },
+
+  // ── 拼寫挑戰 ──
+  { id: 'spelling_50',   icon: '✏️', name: '拼寫新手',   desc: '累計拼寫正確 50 次',    check: s => s.stats.spellingCorrect >= 50 },
+  { id: 'spelling_200',  icon: '⌨️', name: '拼寫之星',  desc: '累計拼寫正確 200 次',   check: s => s.stats.spellingCorrect >= 200 },
+  { id: 'spelling_500',  icon: '📝', name: '拼寫大师',  desc: '累計拼寫正確 500 次',   check: s => s.stats.spellingCorrect >= 500 },
+  { id: 'spell_streak_10', icon: '⚡', name: '闪电拼寫',  desc: '連續拼寫正確 10 次',    check: s => (s.stats.spellingStreakMax || 0) >= 10 },
+  { id: 'spell_streak_20', icon: '🏆', name: '拼寫王者',  desc: '連續拼寫正確 20 次',    check: s => (s.stats.spellingStreakMax || 0) >= 20 },
+
+  // ── 聽力練習 ──
+  { id: 'listen_50',     icon: '👂', name: '初級聽力',   desc: '聽力練習正確 50 次',    check: s => (s.stats.listenCorrect || 0) >= 50 },
+  { id: 'listen_100',    icon: '🎧', name: '耳聯目明',  desc: '聽力練習正確 100 次',   check: s => (s.stats.listenCorrect || 0) >= 100 },
+  { id: 'listen_300',    icon: '🎤', name: '聽力大师',  desc: '聽力練習正確 300 次',   check: s => (s.stats.listenCorrect || 0) >= 300 },
+
+  // ── 測試成就 ──
+  { id: 'test_first',    icon: '📝', name: '初次上陣',   desc: '完成第一次測試',        check: s => (s.stats.testCount || 0) >= 1 },
+  { id: 'test_perfect',  icon: '💯', name: '满分選手',  desc: '任一測試得湿分',        check: s => s.stats.testPerfectCount >= 1 },
+  { id: 'test_perfect3', icon: '🥇', name: '測試天才',  desc: '累計 3 次測試得湿分',     check: s => s.stats.testPerfectCount >= 3 },
+  { id: 'test_5',        icon: '📊', name: '考試达人',  desc: '完成 5 次測試',             check: s => (s.stats.testCount || 0) >= 5 },
+
+  // ── 練習勤奋度 ──
+  { id: 'practice_10',   icon: '🎯', name: '勤奋小学徒', desc: '完成 10 次練習',           check: s => (s.stats.practiceSessionCount || 0) >= 10 },
+  { id: 'practice_30',   icon: '💪', name: '練習达人',  desc: '完成 30 次練習',           check: s => (s.stats.practiceSessionCount || 0) >= 30 },
+  { id: 'practice_correct_100', icon: '✅', name: '百次正確', desc: '練習總正確 100 次',       check: s => (s.stats.totalPracticeCorrect || 0) >= 100 },
+
+  // ── 收藏與錯題 ──
+  { id: 'collector_10',  icon: '💙', name: '收藏新手',  desc: '收藏 10 個單字',            check: s => (s.favorites || []).length >= 10 },
+  { id: 'collector_20',  icon: '💎', name: '收藏達人',  desc: '收藏 20 個單字',            check: s => (s.favorites || []).length >= 20 },
+  { id: 'collector_50',  icon: '💖', name: '收藏大师',  desc: '收藏 50 個單字',            check: s => (s.favorites || []).length >= 50 },
+  { id: 'wrong_clear',   icon: '🧹', name: '錯題清零',  desc: '錯題本清空',             check: s => s.wrongWords.length === 0 && s.stats.spellingCorrect > 0 },
+  { id: 'review_10',     icon: '🔄', name: '復習小將',  desc: '完成 10 次複習',            check: s => (s.stats.reviewCount || 0) >= 10 },
+
+  // ── 星星與稱號 ──
+  { id: 'stars_500',     icon: '⭐', name: '星星收集者', desc: '累計獲得 500 星星',       check: s => s.totalStars >= 500 },
+  { id: 'stars_2000',    icon: '🌟', name: '星星大师',  desc: '累計獲得 2000 星星',      check: s => s.totalStars >= 2000 },
+  { id: 'stars_5000',    icon: '💫', name: '星星传奇',  desc: '累計獲得 5000 星星',      check: s => s.totalStars >= 5000 },
+  { id: 'rank_scholar',  icon: '👑', name: '词汇学者',  desc: '晋升为「词汇学者」称号',  check: s => rankOf(s.totalStars).idx >= 4 },
+  { id: 'rank_master',   icon: '🏅', name: '词汇大师',  desc: '晋升为「词汇大师」称号',  check: s => rankOf(s.totalStars).idx >= 5 },
+  { id: 'rank_legend',   icon: '🐉', name: 'PET 传奇',   desc: '晋升为「PET 传奇」称号',    check: s => rankOf(s.totalStars).idx >= 6 },
 ];
 
 /* ── 稱號/等級系統：依累計星星劃分等級，讓成長感更明顯 ── */
@@ -1787,7 +1830,17 @@ function defaultState() {
     wordMastery: {},
     dailyRecords: {},
     wrongWords: [],
-    stats: { spellingCorrect: 0, testPerfectCount: 0, listenCorrect: 0 },
+    stats: {
+      spellingCorrect: 0,
+      testPerfectCount: 0,
+      listenCorrect: 0,
+      practiceSessionCount: 0,  // 練習居次數
+      testCount: 0,             // 測試居次數
+      spellingStreak: 0,        // 當前連續拼寫正確次數
+      spellingStreakMax: 0,     // 歷史最高連續拼寫
+      reviewCount: 0,           // 複習居次數
+      totalPracticeCorrect: 0,  // 練習總正確次數
+    },
     reducedMotion: false,
     ttsLang: 'en-US',
     ttsRate: 0.85,
@@ -2989,6 +3042,10 @@ function submitSpelling() {
   if (input === target) {
     practiceScore += 10;
     appState.stats.spellingCorrect += 1;
+    appState.stats.spellingStreak = (appState.stats.spellingStreak || 0) + 1;
+    if (appState.stats.spellingStreak > (appState.stats.spellingStreakMax || 0)) {
+      appState.stats.spellingStreakMax = appState.stats.spellingStreak;
+    }
     sessionStats.total++; sessionStats.correct++; sessionStats.spellTotal++; sessionStats.spellCorrect++;
     recordAnswer(w.id, true);
     addStars(10);
@@ -2997,6 +3054,7 @@ function submitSpelling() {
     setTimeout(nextSpelling, 550);
     checkBadges();
   } else {
+    appState.stats.spellingStreak = 0;  // 拼寫錯誤重置連續計數
     spellAttempts--;
     sessionStats.total++; sessionStats.spellTotal++;
     if (!sessionStats.wrongIds.includes(w.id)) sessionStats.wrongIds.push(w.id);
@@ -3128,6 +3186,8 @@ function onSentenceAnswer(btn, w) {
 function finishPractice() {
   const stars = practiceScore;
   const day = appState.currentDay;
+  appState.stats.practiceSessionCount = (appState.stats.practiceSessionCount || 0) + 1;
+  appState.stats.totalPracticeCorrect = (appState.stats.totalPracticeCorrect || 0) + sessionStats.correct;
   const rec = appState.dailyRecords[day] || { newLearned: [], practiceCorrect: 0, stars: 0, completed: false };
   rec.practiceCorrect = (rec.practiceCorrect || 0) + practiceScore / 10;
   rec.stars = (rec.stars || 0) + Math.round(stars / 10);
@@ -3431,6 +3491,7 @@ function startReviewMode(mode) {
     showResultModal('暂无需要复习的词', '<p>你已经复习得很棒了！🎉</p>', { mascot: '🦊' });
     return;
   }
+  appState.stats.reviewCount = (appState.stats.reviewCount || 0) + 1;
   showPage('practice');
   practiceQueue = ids.map(getWord).filter(Boolean);
   practiceIdx = 0; practiceScore = 0;
@@ -3532,6 +3593,7 @@ function finishTest() {
   const wrongCount = testQueue.length - correctCount;
   const stars = testScore;
   addStars(stars);
+  appState.stats.testCount = (appState.stats.testCount || 0) + 1;
   if (pct === 100) { appState.stats.testPerfectCount += 1; celebrate(true); }
   if (testType === 'final') {
     markDayComplete(TOTAL_DAYS, stars);
