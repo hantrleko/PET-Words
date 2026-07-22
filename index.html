@@ -467,6 +467,54 @@
   @keyframes toastIn  { from { opacity:0; transform: translateY(16px) scale(.9); } to { opacity:1; transform: translateY(0) scale(1); } }
   @keyframes toastOut { from { opacity:1; } to { opacity:0; transform: translateY(-8px); } }
 
+  /* ===== Combo 連續答對特效 ===== */
+  #combo-display {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0);
+    z-index: 200; pointer-events: none;
+    font-size: 48px; font-weight: 900; color: var(--sun);
+    text-shadow: 0 4px 16px rgba(255,213,79,.6);
+    transition: transform .25s cubic-bezier(.34,1.56,.64,1), opacity .3s;
+    opacity: 0;
+  }
+  #combo-display.show {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  #combo-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: linear-gradient(135deg, var(--sun), var(--coral));
+    color: white; font-weight: 800; font-size: 13px;
+    border-radius: 999px; padding: 4px 10px;
+    box-shadow: 0 4px 12px rgba(255,138,101,.4);
+    animation: comboPulse 0.6s ease-in-out infinite alternate;
+  }
+  @keyframes comboPulse { from { transform: scale(1); } to { transform: scale(1.08); } }
+
+  /* ===== 滑動手勢提示 ===== */
+  .swipe-hint {
+    text-align: center; font-size: 11px; color: rgba(0,0,0,.3);
+    margin-top: 6px; user-select: none; pointer-events: none;
+    letter-spacing: 0.5px;
+  }
+  body.dark-mode .swipe-hint { color: rgba(255,255,255,.25); }
+
+  /* ===== 字體大小偏好 ===== */
+  body.font-large { font-size: 17px; }
+  body.font-large .vocab-word { font-size: 46px; }
+  body.font-large .choice-btn { font-size: 20px; }
+  body.font-large .kid-btn { font-size: 16px; }
+  body.font-large p, body.font-large span { line-height: 1.6; }
+  body.font-small { font-size: 13px; }
+  body.font-small .vocab-word { font-size: 34px; }
+  body.font-small .choice-btn { font-size: 15px; }
+
+  /* ===== 首頁激勵橫幅 ===== */
+  #home-motivate {
+    text-align: center; font-size: 13px; font-weight: 700;
+    color: rgba(255,255,255,.9); margin-top: 8px; min-height: 20px;
+    letter-spacing: 0.3px;
+  }
+
   /* ===== 收藏星標 ===== */
   .fav-star-btn { color: #d8dee6; transition: transform .2s, color .2s; }
   .fav-star-btn.active { color: var(--sun); }
@@ -706,6 +754,7 @@
         <button id="btn-start-today" class="kid-btn kid-btn-sun w-full text-xl">
           <i class="fa-solid fa-play"></i> 开始今日学习
         </button>
+        <p id="home-motivate"></p>
       </div>
 
       <!-- 统计卡片 2×2 -->
@@ -1175,6 +1224,9 @@
 
   <!-- ========== Toast 輕提示容器 ========== -->
   <div id="toast-root" aria-live="polite"></div>
+
+  <!-- ========== Combo 特效層 ========== -->
+  <div id="combo-display" aria-hidden="true"></div>
 
   <!-- ========== 词库数据（内联，消除外部 vocab-data.js 路径依赖） ========== -->
   <script>
@@ -2706,6 +2758,42 @@ function renderHome() {
       dueCard.classList.add('hidden');
     }
   }
+
+  // 動態激勵語句 + CTA 按鈕
+  const motivateEl = $('#home-motivate');
+  const ctaBtn = $('#btn-start-today');
+  if (motivateEl && ctaBtn) {
+    const streak = appState.streak || 0;
+    const todayDone = rec.completed;
+    const MOTIVATE_MSGS = [
+      '每天一小步，40天大飞跃！🚀',
+      '坚持就是胜利，加油！💪',
+      '单词记得牢，考试不用愁！📚',
+      '今天的努力，是明天的底气！✨',
+      '你比昨天更厉害了！🌟',
+    ];
+    const STREAK_MSGS = [
+      '', '', '',
+      '已连续打卡 3 天，继续保持！🔥',
+      '连续 4 天！你真的很棒！🔥🔥',
+      '连续 5 天！习惯正在养成！🌟',
+      '连续 6 天！离 7 天成就不远了！',
+      '连续 7 天！解锁「一周坚持」徽章！🏅',
+    ];
+    if (todayDone) {
+      motivateEl.textContent = '今日任务完成！继续冲下一天 🎉';
+      ctaBtn.innerHTML = '<i class="fa-solid fa-forward"></i> 继续下一天';
+      ctaBtn.className = 'kid-btn kid-btn-grass w-full text-xl';
+    } else if (streak >= 3 && STREAK_MSGS[streak]) {
+      motivateEl.textContent = STREAK_MSGS[Math.min(streak, STREAK_MSGS.length - 1)];
+      ctaBtn.innerHTML = '<i class="fa-solid fa-play"></i> 开始今日学习';
+      ctaBtn.className = 'kid-btn kid-btn-sun w-full text-xl';
+    } else {
+      motivateEl.textContent = MOTIVATE_MSGS[(day + streak) % MOTIVATE_MSGS.length];
+      ctaBtn.innerHTML = '<i class="fa-solid fa-play"></i> 开始今日学习';
+      ctaBtn.className = 'kid-btn kid-btn-sun w-full text-xl';
+    }
+  }
 }
 
 /* =====================================================================
@@ -2795,7 +2883,7 @@ function renderLearnCard() {
       </div>
     </div>
     ${(() => { const tip = getWordTip(w.word); return tip ? `<div class="mt-3 bg-amber-50 border border-amber-200 rounded-2xl p-3 text-left"><p class="text-xs font-bold text-amber-600 mb-0.5"><i class="fa-solid fa-lightbulb"></i> 記憶技巧</p><p class="text-xs text-amber-700">${tip}</p></div>` : ''; })()}
-    <p class="text-center text-xs text-gray-300 mt-3 select-none">← 左向鍵下一個 · M 已掌握 · S 朗讀 →</p>
+    <p class="swipe-hint mt-3">← 滑動或按方向鍵翻頁 · M 已掌握 · S 朗讀 →</p>
   `;
   // 動畫滑入
   requestAnimationFrame(() => {
@@ -2980,10 +3068,12 @@ function submitListen() {
     recordAnswer(w.id, true);
     addStars(10);
     celebrate();
+    if (window._comboInject) window._comboInject(true);
     showToast(`✅ 听力正确！ <span class="opacity-80">+10⭐</span>`, 'correct');
     setTimeout(() => { practiceIdx++; renderListen(); }, 550);
     checkBadges();
   } else {
+    if (window._comboInject) window._comboInject(false);
     listenAttempts--;
     sessionStats.total++; sessionStats.listenTotal++;
     if (!sessionStats.wrongIds.includes(w.id)) sessionStats.wrongIds.push(w.id);
@@ -3058,11 +3148,13 @@ function submitSpelling() {
     recordAnswer(w.id, true);
     addStars(10);
     celebrate();
+    if (window._comboInject) window._comboInject(true);
     showToast(`✅ ${mascotSay()} <span class="opacity-80">+10⭐</span>`, 'correct');
     setTimeout(nextSpelling, 550);
     checkBadges();
   } else {
     appState.stats.spellingStreak = 0;  // 拼寫錯誤重置連續計數
+    if (window._comboInject) window._comboInject(false);
     spellAttempts--;
     sessionStats.total++; sessionStats.spellTotal++;
     if (!sessionStats.wrongIds.includes(w.id)) sessionStats.wrongIds.push(w.id);
@@ -3488,6 +3580,22 @@ function renderFlashcard() {
     $('#fc-speak', root).addEventListener('click', () => { unlockTTS(); speak(w.word); });
     // 自動朗讀（Android 修復：延遲加長到 700ms）
     setTimeout(() => { unlockTTS(); speak(w.word); }, 700);
+    // 觸摸滑動手勢：左滑下一張，右滑上一張
+    if (card) {
+      let _fcSx = 0, _fcSy = 0;
+      card.addEventListener('touchstart', e => {
+        _fcSx = e.touches[0].clientX;
+        _fcSy = e.touches[0].clientY;
+      }, { passive: true });
+      card.addEventListener('touchend', e => {
+        const dx = e.changedTouches[0].clientX - _fcSx;
+        const dy = e.changedTouches[0].clientY - _fcSy;
+        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+          if (dx < 0) { fcIdx++; closeModal(); renderFlashcard(); }
+          else if (fcIdx > 0) { fcIdx--; closeModal(); renderFlashcard(); }
+        }
+      }, { passive: true });
+    }
   });
 }
 
@@ -4172,6 +4280,16 @@ function showSettings() {
         <p class="text-[10px] text-gray-400 mt-1">影响首页「每日目标」進度条計算</p>
       </div>
 
+      <!-- 字體大小設定 -->
+      <div class="kid-card p-3">
+        <p class="text-xs font-bold text-gray-400 mb-2"><i class="fa-solid fa-text-height text-grass"></i> 字體大小</p>
+        <div class="flex gap-2">
+          <button class="font-size-btn flex-1 kid-btn h-10 text-xs ${(appState.fontSize||'normal') === 'small' ? 'kid-btn-primary' : 'kid-btn-ghost'}" data-size="small">A小</button>
+          <button class="font-size-btn flex-1 kid-btn h-10 text-xs ${(appState.fontSize||'normal') === 'normal' ? 'kid-btn-primary' : 'kid-btn-ghost'}" data-size="normal">標準 A</button>
+          <button class="font-size-btn flex-1 kid-btn h-10 text-xs ${(appState.fontSize||'normal') === 'large' ? 'kid-btn-primary' : 'kid-btn-ghost'}" data-size="large">A大</button>
+        </div>
+      </div>
+
       <!-- 深色模式切換 -->
       <label class="flex items-center justify-between kid-card p-3">
         <span class="text-sm font-bold text-ink"><i class="fa-solid fa-moon text-indigo-400"></i> 深色模式</span>
@@ -4205,6 +4323,19 @@ function showSettings() {
         appState.dailyGoal = parseInt(btn.dataset.goal);
         saveState();
         renderHome();
+      });
+    });
+    // 字體大小切換
+    $$('.font-size-btn', root).forEach(btn => {
+      btn.addEventListener('click', () => {
+        $$('.font-size-btn', root).forEach(b => { b.classList.remove('kid-btn-primary'); b.classList.add('kid-btn-ghost'); });
+        btn.classList.add('kid-btn-primary'); btn.classList.remove('kid-btn-ghost');
+        const size = btn.dataset.size;
+        appState.fontSize = size;
+        document.body.classList.remove('font-small', 'font-large');
+        if (size === 'small') document.body.classList.add('font-small');
+        if (size === 'large') document.body.classList.add('font-large');
+        saveState();
       });
     });
     // TTS 語音切換
@@ -4476,6 +4607,56 @@ function bindEvents() {
   // 首次點擊任何按鈕時也解鎖
   document.addEventListener('click', unlockTTS, { once: true });
 
+  // ===== 學習卡片觸摸滑動手勢 =====
+  (function addLearnSwipe() {
+    let _sx = 0, _sy = 0;
+    const learnArea = $('#learn-card-area');
+    if (!learnArea) return;
+    learnArea.addEventListener('touchstart', e => {
+      _sx = e.touches[0].clientX;
+      _sy = e.touches[0].clientY;
+    }, { passive: true });
+    learnArea.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - _sx;
+      const dy = e.changedTouches[0].clientY - _sy;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        if (dx < 0) {
+          // 向左滑動：下一個
+          learnNext();
+        } else {
+          // 向右滑動：上一個
+          if (learnIdx > 0) { learnIdx--; renderLearnCard(); }
+        }
+      }
+    }, { passive: true });
+  })();
+
+  // ===== Combo 連續答對系統 =====
+  let _practiceCombo = 0;
+  const _origShowToast = window._showToastOrig || showToast;
+  window._comboInject = function(correct) {
+    if (correct) {
+      _practiceCombo++;
+      if (_practiceCombo >= 3) {
+        const comboEl = document.getElementById('combo-display');
+        if (comboEl) {
+          comboEl.textContent = _practiceCombo + '🔥 Combo!';
+          comboEl.classList.add('show');
+          setTimeout(() => comboEl.classList.remove('show'), 900);
+        }
+        // 在練習進度區顯示 combo badge
+        const scoreEl = $('#practice-score');
+        if (scoreEl && _practiceCombo >= 3) {
+          scoreEl.innerHTML = `得分 ${practiceScore} <span id="combo-badge">🔥 ${_practiceCombo} Combo</span>`;
+        }
+      }
+    } else {
+      _practiceCombo = 0;
+      const scoreEl = $('#practice-score');
+      if (scoreEl) scoreEl.textContent = '得分 ' + practiceScore;
+    }
+  };
+
   // ===== 全局鍵盤快捷鍵 =====
   document.addEventListener('keydown', function(e) {
     const tag = document.activeElement ? document.activeElement.tagName : '';
@@ -4521,6 +4702,10 @@ function init() {
   PLAN = buildPlan();
   document.body.classList.toggle('reduce-motion', appState.reducedMotion);
   document.body.classList.toggle('dark-mode', !!appState.darkMode);
+  // 套用字體大小偏好
+  document.body.classList.remove('font-small', 'font-large');
+  if (appState.fontSize === 'small') document.body.classList.add('font-small');
+  if (appState.fontSize === 'large') document.body.classList.add('font-large');
   // 同步 TTS 偏好設定
   _ttsLang = appState.ttsLang || 'en-US';
   _ttsRate = appState.ttsRate || 0.85;
